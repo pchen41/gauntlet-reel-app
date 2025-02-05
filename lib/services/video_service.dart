@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore, FieldValue;
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore, FieldValue, FieldPath;
 import 'package:path/path.dart' as path;
 import '../models/video_model.dart';
 import 'package:uuid/uuid.dart';
@@ -152,6 +152,40 @@ class VideoService {
       }).toList();
     } catch (e) {
       print('Error getting user videos: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getLikedVideos(String userId) async {
+    try {
+      // First get all likes by the user
+      final likesSnapshot = await _firestore
+          .collection('likes')
+          .where('uid', isEqualTo: userId)
+          .get();
+
+      if (likesSnapshot.docs.isEmpty) {
+        return [];
+      }
+
+      // Get all video IDs that the user has liked
+      final videoIds = likesSnapshot.docs.map((doc) => doc.data()['video_id'] as String).toList();
+
+      // Fetch all liked videos
+      final videosSnapshot = await _firestore
+          .collection('videos')
+          .where(FieldPath.documentId, whereIn: videoIds)
+          .get();
+
+      return videosSnapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          ...data,
+          'id': doc.id,
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting liked videos: $e');
       rethrow;
     }
   }
