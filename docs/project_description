@@ -1,8 +1,9 @@
-We are creating a tiktok clone app using react native (with typescript) and expo. This app will have the following features:
+We are creating a tiktok clone app using flutter called ReelAI. This app will have the following features:
 
 - Account creation and authentication using Firebase
-- User profiles with bio, profile picture, and other user information
+- User profiles with bio, profile picture and a grid of their videos
 - A feed of infinitely scrolling videos
 - Each videos will allow users to like, comment, and share
-- Users can follow other users
-- Users can direct message other users
+- Allow the user to a video from their camera roll
+- User should be taken to login screen on app launch if not logged in, otherwise they should be taken to the home screen (feed of videos)
+- There should be a nav bar at the bottom that lets the user switch between the home screen (feed of videos), and the profile screen

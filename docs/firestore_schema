@@ -1,0 +1,27 @@
+this is the schema for the firestore database
+
+users:
+- uid: string
+- name: string
+- email: string
+
+videos:
+- uid: string
+- description: string
+- thumbnail_url: string
+- title: string
+- uid: string
+- url: string
+
+likes:
+- uid: string
+- video_id: string
+- created_at: timestamp
+
+comments:
+- uid: string
+- video_id: string
+- created_at: timestamp
+- text: string
+
+

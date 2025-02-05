@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "77080749785",
+    "project_id": "reels-a60ee",
+    "storage_bucket": "reels-a60ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:77080749785:android:2f34a41f6851e7403940c8",
+        "android_client_info": {
+          "package_name": "com.example.reels_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDm2RALWNRI49TvTWmfFy67jLFB43QLP-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:77080749785:android:2059660448f7e6123940c8",
+        "android_client_info": {
+          "package_name": "com.pgauntlet.reelapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDm2RALWNRI49TvTWmfFy67jLFB43QLP-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
