@@ -1,4 +1,4 @@
-We are creating a tiktok clone app using react native and expo. This app will have the following features:
+We are creating a tiktok clone app using react native (with typescript) and expo. This app will have the following features:
 
 - Account creation and authentication using Firebase
 - User profiles with bio, profile picture, and other user information
@@ -6,7 +6,3 @@ We are creating a tiktok clone app using react native and expo. This app will ha
 - Each videos will allow users to like, comment, and share
 - Users can follow other users
 - Users can direct message other users
-
-
-
-
