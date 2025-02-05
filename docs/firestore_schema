@@ -6,20 +6,20 @@ users:
 - email: string
 
 videos:
-- uid: string
+- uid: string //user id
 - description: string
 - thumbnail_url: string
 - title: string
-- uid: string
 - url: string
+- created_at: timestamp
 
 likes:
-- uid: string
+- uid: string // user id
 - video_id: string
 - created_at: timestamp
 
 comments:
-- uid: string
+- uid: string // user id
 - video_id: string
 - created_at: timestamp
 - text: string

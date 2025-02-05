@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore, FieldValue;
 import 'package:path/path.dart' as path;
 import '../models/video_model.dart';
 import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:path_provider/path_provider.dart';
 
 class VideoService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -26,9 +28,28 @@ class VideoService {
     final String videoId = const Uuid().v4();
     final String videoExtension = path.extension(videoFile.path);
     final String videoFileName = 'videos/$userId/$videoId$videoExtension';
-    //final String thumbnailFileName = 'thumbnails/$userId/$videoId.jpg';
+    final String thumbnailFileName = 'thumbnails/$userId/$videoId.jpg';
 
     try {
+      // Generate thumbnail
+      final tempDir = await getTemporaryDirectory();
+      final thumbnailPath = await VideoThumbnail.thumbnailFile(
+        video: videoFile.path,
+        thumbnailPath: '${tempDir.path}/thumbnail.jpg',
+        imageFormat: ImageFormat.JPEG,
+        maxHeight: 600,
+        quality: 85,
+      );
+
+      if (thumbnailPath == null) {
+        throw 'Failed to generate thumbnail';
+      }
+
+      // Upload thumbnail
+      final thumbnailRef = _storage.ref().child(thumbnailFileName);
+      await thumbnailRef.putFile(File(thumbnailPath));
+      final thumbnailUrl = await thumbnailRef.getDownloadURL();
+
       // Compress video before upload (you'll need video_compress package)
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
@@ -58,24 +79,31 @@ class VideoService {
       final videoSnapshot = await uploadTask;
       final videoUrl = await videoSnapshot.ref.getDownloadURL();
 
-      // For now, we'll use a placeholder thumbnail URL
-      // TODO: Generate actual thumbnail from video
-      const thumbnailUrl = 'https://placeholder.com/thumbnail.jpg';
-
       // Create video document in Firestore
       final videoModel = VideoModel(
-        uid: videoId,
+        id: videoId,
+        uid: userId,
         title: title,
         description: description,
         url: videoUrl,
         thumbnailUrl: thumbnailUrl,
-        userId: userId,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
       );
+
+      // Convert the model to a map and modify field names for Firebase
+      final videoData = {
+        'uid': videoModel.uid,
+        'title': videoModel.title,
+        'description': videoModel.description,
+        'url': videoModel.url,
+        'thumbnail_url': videoModel.thumbnailUrl,
+        'created_at': FieldValue.serverTimestamp(),
+      };
 
       await _firestore
           .collection('videos')
           .doc(videoId)
-          .set(videoModel.toMap());
+          .set(videoData);
 
       return videoModel;
     } catch (e) {
@@ -87,12 +115,44 @@ class VideoService {
     try {
       final querySnapshot = await _firestore
           .collection('videos')
-          .orderBy('uid', descending: true)  // Latest first
+          .orderBy('created_at', descending: true)  // Changed from 'uid' to 'created_at'
           .get();
 
-      return querySnapshot.docs.map((doc) => VideoModel.fromMap(doc.data())).toList();
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return VideoModel(
+          id: doc.id,
+          uid: data['uid'] ?? '',
+          title: data['title'] ?? '',
+          description: data['description'] ?? '',
+          url: data['url'] ?? '',
+          thumbnailUrl: data['thumbnail_url'] ?? '',
+          createdAt: data['created_at']?.millisecondsSinceEpoch ?? 0,
+        );
+      }).toList();
     } catch (e) {
       throw 'Failed to fetch videos: $e';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUserVideos(String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('videos')
+          .where('uid', isEqualTo: userId)
+          .orderBy('created_at', descending: true)
+          .get();
+
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          ...data,
+          'id': doc.id,
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting user videos: $e');
+      rethrow;
     }
   }
 } 

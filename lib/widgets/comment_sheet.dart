@@ -8,9 +8,9 @@ class CommentSheet extends StatefulWidget {
   final String videoId;
 
   const CommentSheet({
-    Key? key,
+    super.key,
     required this.videoId,
-  }) : super(key: key);
+  });
 
   @override
   State<CommentSheet> createState() => _CommentSheetState();
