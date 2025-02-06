@@ -116,6 +116,35 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildLessonList(List<Map<String, dynamic>> lessons) {
+    if (lessons.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 100),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'No bookmarked lessons',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Bookmark lessons to access them quickly',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
@@ -170,6 +199,35 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildVideoGrid(List<Map<String, dynamic>> videos) {
+    if (videos.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 100),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'No liked videos',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Like videos to access them quickly',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
@@ -313,7 +371,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
                 Text(
                   _user?.email ?? 'Loading...',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(

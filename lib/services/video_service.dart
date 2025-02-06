@@ -80,24 +80,30 @@ class VideoService {
       final videoUrl = await videoSnapshot.ref.getDownloadURL();
 
       // Create video document in Firestore
-      final docRef = await _firestore.collection('videos').add({
-        'uid': userId,
-        'title': title,
-        'description': description,
-        'url': videoUrl,
-        'thumbnail_url': thumbnailUrl,
-        'created_at': Timestamp.now(),
-      });
-
       final videoModel = VideoModel(
+        id: videoId,
         uid: userId,
-        id: docRef.id,
         title: title,
         description: description,
         url: videoUrl,
         thumbnailUrl: thumbnailUrl,
         createdAt: Timestamp.now(),
       );
+
+      // Convert the model to a map and modify field names for Firebase
+      final videoData = {
+        'uid': videoModel.uid,
+        'title': videoModel.title,
+        'description': videoModel.description,
+        'url': videoModel.url,
+        'thumbnail_url': videoModel.thumbnailUrl,
+        'created_at': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore
+          .collection('videos')
+          .doc(videoId)
+          .set(videoData);
 
       return videoModel;
     } catch (e) {

@@ -41,3 +41,14 @@ bookmarks: // save lessons for later reference
 - uid: string // user id
 - lesson_id: string // the document id of the lesson
 - created_at: timestamp
+
+goals:
+- uid: string // user id
+- name: string
+- updated_at: timestamp
+- tasks:
+  - name: string
+  - completed: boolean
+  - comments: string
+  - type: string // can be "lesson" or "text"
+  - value: string // if task type is "lesson", it is the video document id. if task type is "text", it is the text content of the task

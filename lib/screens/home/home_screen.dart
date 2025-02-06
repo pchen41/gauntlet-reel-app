@@ -3,6 +3,7 @@ import '../../models/video_model.dart';
 import '../../services/video_service.dart';
 import '../profile/profile_screen.dart';
 import '../lessons/lessons_screen.dart';
+import '../goals/goals_screen.dart';
 import '../../widgets/video_player_widget.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const FeedScreen(),
+    const GoalsScreen(),
     const LessonsScreen(),
     ProfileScreen(),
   ];
@@ -38,6 +40,10 @@ class _HomeScreenState extends State<HomeScreen> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
+            label: '',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.flag),
             label: '',
           ),
           BottomNavigationBarItem(
