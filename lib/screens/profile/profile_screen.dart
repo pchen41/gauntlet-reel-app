@@ -7,6 +7,8 @@ import 'dart:io';
 import '../../services/video_service.dart';
 import '../../widgets/video_player_screen.dart';
 import '../../models/video_model.dart';
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   ProfileScreen({Key? key}) : super(key: key);
@@ -145,15 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           final video = videos[index];
           return GestureDetector(
             onTap: () {
-              final videoModels = videos.map((data) => VideoModel(
-                id: data['id'] ?? '',
-                uid: data['uid'] ?? '',
-                title: data['title'] ?? '',
-                description: data['description'] ?? '',
-                url: data['url'] ?? '',
-                thumbnailUrl: data['thumbnail_url'] ?? '',
-                createdAt: data['created_at']?.millisecondsSinceEpoch ?? 0,
-              )).toList();
+              final videoModels = videos.map((data) => VideoModel.fromMap(data, data['id'])).toList();
 
               Navigator.push(
                 context,
@@ -205,8 +199,21 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ReelAI'),
+        title: const Text('Profile'),
         actions: [
+          IconButton(
+            icon: Consumer<ThemeProvider>(
+              builder: (context, themeProvider, child) {
+                return Icon(
+                  themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                );
+              },
+            ),
+            onPressed: () {
+              final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+              themeProvider.toggleTheme();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -216,68 +223,66 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _handleRefresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  const CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey,
-                    child: Icon(Icons.person, size: 50, color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _user?.name ?? 'Unknown User',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _user?.email ?? '',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _handleUpload,
-                    icon: const Icon(Icons.upload),
-                    label: const Text('Upload Video'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
+      body: Column(
+        children: [
+          // Fixed profile section
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _user?.name ?? 'Unknown User',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'Uploaded'),
-                      Tab(text: 'Liked'),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      _user?.email ?? '',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            SliverFillRemaining(
-              child: TabBarView(
+              const SizedBox(height: 16),
+              TabBar(
                 controller: _tabController,
-                children: [
-                  CustomScrollView(
-                    slivers: [_buildVideoGrid(_userVideos)],
-                  ),
-                  CustomScrollView(
-                    slivers: [_buildVideoGrid(_likedVideos)],
-                  ),
+                tabs: const [
+                  Tab(text: 'Uploaded'),
+                  Tab(text: 'Liked'),
                 ],
               ),
+            ],
+          ),
+          // Scrollable content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [_buildVideoGrid(_userVideos)],
+                ),
+                CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [_buildVideoGrid(_likedVideos)],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -343,4 +348,4 @@ class _VideoDetailsDialogState extends State<_VideoDetailsDialog> {
     _descriptionController.dispose();
     super.dispose();
   }
-} 
+}

@@ -113,7 +113,7 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
             ),
             Positioned(
               left: 16,
-              bottom: 16,
+              bottom: 36,
               right: 100,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,7 +151,7 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
             ),
             Positioned(
               right: 16,
-              bottom: 16,
+              bottom: 36,
               child: Column(
                 children: [
                   StreamBuilder<bool>(

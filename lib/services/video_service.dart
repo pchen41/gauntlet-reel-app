@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore, FieldValue, FieldPath;
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore, FieldValue, FieldPath, Timestamp;
 import 'package:path/path.dart' as path;
 import '../models/video_model.dart';
 import 'package:uuid/uuid.dart';
@@ -80,30 +80,24 @@ class VideoService {
       final videoUrl = await videoSnapshot.ref.getDownloadURL();
 
       // Create video document in Firestore
+      final docRef = await _firestore.collection('videos').add({
+        'uid': userId,
+        'title': title,
+        'description': description,
+        'url': videoUrl,
+        'thumbnail_url': thumbnailUrl,
+        'created_at': Timestamp.now(),
+      });
+
       final videoModel = VideoModel(
-        id: videoId,
         uid: userId,
+        id: docRef.id,
         title: title,
         description: description,
         url: videoUrl,
         thumbnailUrl: thumbnailUrl,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
+        createdAt: Timestamp.now(),
       );
-
-      // Convert the model to a map and modify field names for Firebase
-      final videoData = {
-        'uid': videoModel.uid,
-        'title': videoModel.title,
-        'description': videoModel.description,
-        'url': videoModel.url,
-        'thumbnail_url': videoModel.thumbnailUrl,
-        'created_at': FieldValue.serverTimestamp(),
-      };
-
-      await _firestore
-          .collection('videos')
-          .doc(videoId)
-          .set(videoData);
 
       return videoModel;
     } catch (e) {
@@ -119,16 +113,8 @@ class VideoService {
           .get();
 
       return querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        return VideoModel(
-          id: doc.id,
-          uid: data['uid'] ?? '',
-          title: data['title'] ?? '',
-          description: data['description'] ?? '',
-          url: data['url'] ?? '',
-          thumbnailUrl: data['thumbnail_url'] ?? '',
-          createdAt: data['created_at']?.millisecondsSinceEpoch ?? 0,
-        );
+        final data = doc.data() as Map<String, dynamic>;
+        return VideoModel.fromMap(data, doc.id);
       }).toList();
     } catch (e) {
       throw 'Failed to fetch videos: $e';

@@ -1,11 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class VideoModel {
   final String uid;
-  final String id;
+  final String id;  // This is the document ID
   final String title;
   final String description;
   final String url;
   final String thumbnailUrl;
-  final int createdAt;
+  final Timestamp createdAt;
 
   VideoModel({
     required this.uid,
@@ -20,24 +22,23 @@ class VideoModel {
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
-      'id': id,
       'title': title,
       'description': description,
       'url': url,
-      'thumbnailUrl': thumbnailUrl,
-      'createdAt': createdAt,
+      'thumbnail_url': thumbnailUrl,
+      'created_at': createdAt,
     };
   }
 
-  factory VideoModel.fromMap(Map<String, dynamic> map) {
+  factory VideoModel.fromMap(Map<String, dynamic> map, String documentId) {
     return VideoModel(
-      uid: map['uid'],
-      id: map['id'],
-      title: map['title'],
-      description: map['description'],
-      url: map['url'],
-      thumbnailUrl: map['thumbnailUrl'],
-      createdAt: map['createdAt'],
+      uid: map['uid'] ?? '',
+      id: documentId,
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      url: map['url'] ?? '',
+      thumbnailUrl: map['thumbnail_url'] ?? '',
+      createdAt: map['created_at'] as Timestamp,
     );
   }
-} 
+}

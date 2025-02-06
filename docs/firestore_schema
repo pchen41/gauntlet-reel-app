@@ -24,4 +24,20 @@ comments:
 - created_at: timestamp
 - text: string
 
+lessions:
+- author_uid: string // user id of lesson creator
+- created_at: timestamp
+- title: string
+- description: string
+- videos: array of string (each value is the document id of a video)
 
+lesson_views:
+- uid: string // user id
+- lesson_id: string // the document id of the lesson
+- last_viewed_index: number (last viewed video index in the lesson)
+- updated_at: timestamp
+
+bookmarks: // save lessons for later reference
+- uid: string // user id
+- lesson_id: string // the document id of the lesson
+- created_at: timestamp
