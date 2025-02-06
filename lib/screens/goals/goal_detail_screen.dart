@@ -293,8 +293,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                         child: const Icon(Icons.drag_handle),
                       ),
                       contentPadding: task.type == 'lesson'
-                          ? const EdgeInsets.fromLTRB(16, 4, 16, 0)
-                          : null,
+                          ? const EdgeInsets.fromLTRB(16, 4, 12, 0)
+                          : const EdgeInsets.fromLTRB(16, 0, 12, 0),
                       title: Text(task.name),
                       subtitle: (task.comments.isNotEmpty || task.type == 'lesson')
                           ? Column(
@@ -364,149 +364,124 @@ class AddTaskDialog extends StatefulWidget {
 }
 
 class _AddTaskDialogState extends State<AddTaskDialog> {
-  late final TextEditingController _nameController;
-  String _taskType = 'text';
+  final _formKey = GlobalKey<FormState>();
+  final _taskController = TextEditingController();
   String? _selectedLessonId;
   List<Map<String, dynamic>> _lessons = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
     _loadLessons();
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _taskController.dispose();
     super.dispose();
   }
 
   Future<void> _loadLessons() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      final lessons = await FirebaseFirestore.instance
+      final QuerySnapshot snapshot = await FirebaseFirestore.instance
           .collection('lessons')
-          .orderBy('created_at', descending: true)
           .get();
-      setState(() => _lessons = lessons.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList());
+
+      setState(() {
+        _lessons = snapshot.docs
+            .map((doc) => {
+                  'id': doc.id,
+                  'title': (doc.data() as Map<String, dynamic>)['title'] ?? '',
+                })
+            .toList();
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading lessons: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('Error loading lessons: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _submit() {
+    if (_formKey.currentState!.validate()) {
+      final task = GoalTask(
+        name: _taskController.text.trim(),
+        completed: false,
+        type: _selectedLessonId != null ? 'lesson' : 'text',
+        value: _selectedLessonId ?? _taskController.text.trim(),
+      );
+      Navigator.of(context).pop(task);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      child: Container(
-        width: 400,
-        padding: const EdgeInsets.all(16),
+    return AlertDialog(
+      title: const Text('Add Task'),
+      content: Form(
+        key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Add Task',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 16),
             TextFormField(
-              controller: _nameController,
-              autofocus: true,
+              controller: _taskController,
               decoration: const InputDecoration(
+                labelText: 'Task Name',
                 hintText: 'Enter task name',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
-            ),
-            const SizedBox(height: 16),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'text',
-                  label: Text('Text'),
-                  icon: Icon(Icons.text_fields),
-                ),
-                ButtonSegment(
-                  value: 'lesson',
-                  label: Text('Lesson'),
-                  icon: Icon(Icons.video_library),
-                ),
-              ],
-              selected: {_taskType},
-              onSelectionChanged: (Set<String> newSelection) {
-                setState(() => _taskType = newSelection.first);
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a task name';
+                }
+                return null;
               },
             ),
-            if (_taskType == 'lesson') ...[
-              const SizedBox(height: 16),
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else
-                DropdownButtonFormField<String>(
-                  value: _selectedLessonId,
-                  decoration: const InputDecoration(
-                    labelText: 'Select Lesson',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: _lessons.map((lesson) {
-                    return DropdownMenuItem<String>(
-                      value: lesson['id'] as String,
-                      child: Text(lesson['title'] as String),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedLessonId = value);
-                  },
-                ),
-            ],
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_lessons.isNotEmpty)
+              DropdownButtonFormField<String>(
+                value: _selectedLessonId,
+                decoration: const InputDecoration(
+                  labelText: 'Lesson (Optional)',
                 ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () {
-                    if (_taskType == 'lesson' && _selectedLessonId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please select a lesson')),
-                      );
-                      return;
-                    }
-                    final task = GoalTask(
-                      name: _nameController.text,
-                      completed: false,
-                      type: _taskType,
-                      value: _taskType == 'lesson' ? _selectedLessonId! : _nameController.text,
-                    );
-                    Navigator.pop(context, task);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('No lesson'),
+                  ),
+                  ..._lessons.map((lesson) => DropdownMenuItem<String>(
+                        value: lesson['id'],
+                        child: Text(lesson['title']),
+                      )),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedLessonId = value;
+                  });
+                },
+              ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }
