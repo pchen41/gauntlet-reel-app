@@ -26,6 +26,35 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
   final AuthService _authService = AuthService();
   bool _isInitialized = false;
   bool _isDisposed = false;
+  bool _showPlayPauseIcon = false;
+  IconData _currentIcon = Icons.pause;
+  double _iconOpacity = 0.0;
+
+  void _showPlayPauseAnimation(bool isPlaying) {
+    setState(() {
+      _showPlayPauseIcon = true;
+      _iconOpacity = 1.0;
+      _currentIcon = isPlaying ? Icons.play_arrow : Icons.pause;
+    });
+    
+    // Start fading out immediately
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        setState(() {
+          _iconOpacity = 0.0;
+        });
+      }
+    });
+    
+    // Hide the icon container after animation completes
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        setState(() {
+          _showPlayPauseIcon = false;
+        });
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -93,118 +122,135 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
       onTap: () {
         if (_controller?.value.isPlaying == true) {
           _controller?.pause();
+          _showPlayPauseAnimation(false);
         } else {
           _controller?.play();
+          _showPlayPauseAnimation(true);
         }
       },
-      child: Container(
-        color: Colors.black,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller?.value.size.width,
-                  height: _controller?.value.size.height,
-                  child: VideoPlayer(_controller!),
+      child: Stack(
+        children: [
+          Container(
+            color: Colors.black,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: VideoPlayer(_controller!),
+              ),
+            ),
+          ),
+          if (_showPlayPauseIcon)
+            AnimatedOpacity(
+              opacity: _iconOpacity,
+              duration: const Duration(milliseconds: 300),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _currentIcon,
+                    size: 48,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-            Positioned(
-              left: 16,
-              bottom: 36,
-              right: 100,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.video.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 8,
-                          color: Colors.black,
-                        ),
-                      ],
-                    ),
+          Positioned(
+            left: 16,
+            bottom: 36,
+            right: 100,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.video.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 8,
+                        color: Colors.black,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.video.description,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 8,
-                          color: Colors.black,
-                        ),
-                      ],
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.video.description,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 8,
+                        color: Colors.black,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Positioned(
-              right: 16,
-              bottom: 36,
-              child: Column(
-                children: [
-                  StreamBuilder<bool>(
-                    stream: _likeService.hasUserLiked(
-                      _authService.currentUser!.uid,
-                      widget.video.id,
-                    ),
-                    builder: (context, hasLikedSnapshot) {
-                      return StreamBuilder<int>(
-                        stream: _likeService.getLikeCount(widget.video.id),
-                        builder: (context, likesSnapshot) {
-                          return _ActionButton(
-                            icon: hasLikedSnapshot.data == true
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            label: '${likesSnapshot.data ?? 0}',
-                            onTap: () => _likeService.toggleLike(
-                              _authService.currentUser!.uid,
-                              widget.video.id,
-                            ),
-                            color: hasLikedSnapshot.data == true
-                                ? Colors.red
-                                : Colors.white,
-                          );
-                        },
-                      );
-                    },
+          ),
+          Positioned(
+            right: 16,
+            bottom: 36,
+            child: Column(
+              children: [
+                StreamBuilder<bool>(
+                  stream: _likeService.hasUserLiked(
+                    _authService.currentUser!.uid,
+                    widget.video.id,
                   ),
-                  const SizedBox(height: 20),
-                  StreamBuilder<int>(
-                    stream: CommentService().getCommentCount(widget.video.id),
-                    builder: (context, snapshot) {
-                      return _ActionButton(
-                        icon: Icons.comment,
-                        label: '${snapshot.data ?? 0}',
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (context) => SizedBox(
-                              height: MediaQuery.of(context).size.height * 0.75,
-                              child: CommentSheet(videoId: widget.video.id),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ],
-              ),
+                  builder: (context, hasLikedSnapshot) {
+                    return StreamBuilder<int>(
+                      stream: _likeService.getLikeCount(widget.video.id),
+                      builder: (context, likesSnapshot) {
+                        return _ActionButton(
+                          icon: hasLikedSnapshot.data == true
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          label: '${likesSnapshot.data ?? 0}',
+                          onTap: () => _likeService.toggleLike(
+                            _authService.currentUser!.uid,
+                            widget.video.id,
+                          ),
+                          color: hasLikedSnapshot.data == true
+                              ? Colors.red
+                              : Colors.white,
+                        );
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                StreamBuilder<int>(
+                  stream: CommentService().getCommentCount(widget.video.id),
+                  builder: (context, snapshot) {
+                    return _ActionButton(
+                      icon: Icons.comment,
+                      label: '${snapshot.data ?? 0}',
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (context) => SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.75,
+                            child: CommentSheet(videoId: widget.video.id),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -255,4 +301,4 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
-} 
+}

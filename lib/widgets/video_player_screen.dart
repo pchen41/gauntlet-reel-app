@@ -5,11 +5,13 @@ import './video_player_widget.dart';
 class VideoPlayerScreen extends StatefulWidget {
   final List<VideoModel> videos;
   final int initialIndex;
+  final String? lessonTitle;
 
   const VideoPlayerScreen({
     Key? key,
     required this.videos,
     required this.initialIndex,
+    this.lessonTitle,
   }) : super(key: key);
 
   @override
@@ -42,16 +44,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             },
           ),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 28,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      if (widget.lessonTitle != null) ...[
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            widget.lessonTitle!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -64,4 +90,4 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _pageController.dispose();
     super.dispose();
   }
-} 
+}

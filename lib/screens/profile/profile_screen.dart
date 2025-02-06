@@ -9,6 +9,9 @@ import '../../widgets/video_player_screen.dart';
 import '../../models/video_model.dart';
 import 'package:provider/provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../services/lesson_service.dart';
+import '../lessons/lesson_detail_screen.dart';
+import 'package:flutter/services.dart';
 
 class ProfileScreen extends StatefulWidget {
   ProfileScreen({Key? key}) : super(key: key);
@@ -21,11 +24,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
   final VideoService _videoService = VideoService();
+  final LessonService _lessonService = LessonService();
   late TabController _tabController;
   UserModel? _user;
   bool _isLoading = true;
-  List<Map<String, dynamic>> _userVideos = [];
+  List<Map<String, dynamic>> _bookmarkedLessons = [];
   List<Map<String, dynamic>> _likedVideos = [];
+  Map<String, Map<String, dynamic>> _videoLessons = {};  // Map of video ID to lesson data
 
   @override
   void initState() {
@@ -42,7 +47,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Future<void> _initializeData() async {
     try {
-      // Only load user data if not already loaded
       if (_user == null) {
         final userData = await _userService.getUser(_authService.currentUser!.uid);
         if (!mounted) return;
@@ -51,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         }
       }
 
-      await _loadUserVideos();
+      await _loadUserContent();
     } catch (e) {
       print('Error loading profile data: $e');
       if (!mounted) return;
@@ -61,128 +65,198 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     }
   }
 
-  Future<void> _loadUserVideos() async {
+  Future<void> _loadUserContent() async {
     try {
-      final userVideos = await _videoService.getUserVideos(_authService.currentUser!.uid);
+      // Get all lessons first
+      final allLessons = await _lessonService.getAllLessons();
+      
+      // Get bookmark statuses for all lessons
+      final bookmarkStatuses = await _lessonService.getLessonBookmarkStatuses(
+        _authService.currentUser!.uid,
+        allLessons.map((lesson) => lesson['id'] as String).toList(),
+      );
+      
+      // Filter to only bookmarked lessons
+      final bookmarkedLessons = allLessons.where(
+        (lesson) => bookmarkStatuses[lesson['id']] == true
+      ).toList();
+
+      // Get liked videos
       final likedVideos = await _videoService.getLikedVideos(_authService.currentUser!.uid);
       
-      for (var video in userVideos) {
-        print('Video thumbnail URL: ${video['thumbnail_url']}');
+      // Create a map of video IDs to find which lesson each video belongs to
+      Map<String, Map<String, dynamic>> videoLessons = {};
+      
+      // For each lesson, check if it contains any of our liked videos
+      for (var lesson in allLessons) {
+        final List<dynamic> lessonVideos = lesson['videos'] ?? [];
+        for (var video in likedVideos) {
+          if (lessonVideos.contains(video['id'])) {
+            videoLessons[video['id']] = lesson;
+          }
+        }
       }
       
       if (!mounted) return;
       setState(() {
-        _userVideos = userVideos;
+        _bookmarkedLessons = bookmarkedLessons;
         _likedVideos = likedVideos;
+        _videoLessons = videoLessons;
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading videos: $e');
+      print('Error loading content: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleRefresh() async {
-    await _loadUserVideos();
+    await _loadUserContent();
   }
 
-  Future<void> _handleUpload() async {
-    try {
-      // Pick video file
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
-        allowMultiple: false,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final file = File(result.files.first.path!);
-      
-      if (!mounted) return;
-      // Show dialog for video details
-      final videoDetails = await showDialog<Map<String, String>>(
-        context: context,
-        builder: (context) => _VideoDetailsDialog(),
-      );
-
-      if (videoDetails == null) return;
-
-      // Show loading indicator
-      setState(() => _isLoading = true);
-
-      // Upload video
-      await _videoService.uploadVideo(
-        videoFile: file,
-        userId: _authService.currentUser!.uid,
-        title: videoDetails['title']!,
-        description: videoDetails['description']!,
-      );
-
-      // Reload user data to show new video
-      await _loadUserVideos();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video uploaded successfully!')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  Widget _buildLessonList(List<Map<String, dynamic>> lessons) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index >= lessons.length) return null;
+          final lesson = lessons[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 14),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[700]!
+                    : Colors.grey[300]!,
+                width: 1,
+              ),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16.0),
+              title: Text(
+                lesson['title'] ?? '',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.0,
+                ),
+              ),
+              subtitle: Text(
+                lesson['description'] ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LessonDetailScreen(
+                      lessonId: lesson['id'],
+                    ),
+                  ),
+                );
+                // Refresh data when returning from lesson detail
+                if (mounted) {
+                  _loadUserContent();
+                }
+              },
+            ),
+          );
+        },
+        childCount: lessons.length,
+      ),
+    );
   }
 
   Widget _buildVideoGrid(List<Map<String, dynamic>> videos) {
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        mainAxisSpacing: 2,
-        crossAxisSpacing: 2,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
       ),
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index >= videos.length) return null;
           final video = videos[index];
+          final lesson = _videoLessons[video['id']];
+          
           return GestureDetector(
-            onTap: () {
-              final videoModels = videos.map((data) => VideoModel.fromMap(data, data['id'])).toList();
-
-              Navigator.push(
+            onTap: () async {
+              // If we found the lesson this video belongs to, get all its videos
+              if (lesson != null) {
+                final lessonDetails = await _lessonService.getLessonDetails(lesson['id']);
+                if (lessonDetails != null && mounted) {
+                  final lessonVideos = (lessonDetails['videos'] as List<dynamic>)
+                    .map((v) => VideoModel.fromMap(v as Map<String, dynamic>, v['id'] as String))
+                    .toList();
+                  
+                  // Find the index of our current video in the lesson's videos
+                  final currentVideoIndex = lessonVideos
+                    .indexWhere((v) => v.id == video['id']);
+                  
+                  if (currentVideoIndex != -1) {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => VideoPlayerScreen(
+                          videos: lessonVideos,
+                          initialIndex: currentVideoIndex,
+                          lessonTitle: lesson['title'],
+                        ),
+                      ),
+                    );
+                    if (mounted) {
+                      _loadUserContent();
+                    }
+                  }
+                }
+              }
+            },
+            onLongPress: lesson != null ? () async {
+              HapticFeedback.lightImpact();
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => VideoPlayerScreen(
-                    videos: videoModels,
-                    initialIndex: index,
+                  builder: (context) => LessonDetailScreen(
+                    lessonId: lesson['id'],
                   ),
                 ),
               );
-            },
-            child: Container(
-              color: Colors.grey[300],
-              child: video['thumbnail_url'] != null
-                  ? Image.network(
-                      video['thumbnail_url'],
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        print('Error loading thumbnail: $error');
-                        return const Center(
+              if (mounted) {
+                _loadUserContent();
+              }
+            } : null,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: Colors.grey[300],
+                  child: video['thumbnail_url'] != null
+                      ? Image.network(
+                          video['thumbnail_url'],
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            print('Error loading thumbnail: $error');
+                            return const Center(
+                              child: Icon(
+                                Icons.error_outline,
+                                size: 30,
+                                color: Colors.grey,
+                              ),
+                            );
+                          },
+                        )
+                      : const Center(
                           child: Icon(
-                            Icons.error_outline,
+                            Icons.play_circle_outline,
                             size: 30,
                             color: Colors.grey,
                           ),
-                        );
-                      },
-                    )
-                  : const Center(
-                      child: Icon(
-                        Icons.play_circle_outline,
-                        size: 30,
-                        color: Colors.grey,
-                      ),
-                    ),
+                        ),
+                ),
+              ],
             ),
           );
         },
@@ -225,46 +299,40 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
       body: Column(
         children: [
-          // Fixed profile section
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _user?.name ?? 'Unknown User',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _user?.email ?? '',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+          // User Info Section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Text(
+                  _user?.name ?? 'Loading...',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TabBar(
-                controller: _tabController,
-                tabs: const [
-                  Tab(text: 'Uploaded'),
-                  Tab(text: 'Liked'),
-                ],
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  _user?.email ?? 'Loading...',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Bookmarked'),
+                Tab(text: 'Liked'),
+              ],
+              dividerColor: Theme.of(context).dividerColor.withOpacity(0.1),
+            ),
           ),
           // Scrollable content
           Expanded(
@@ -273,11 +341,33 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               children: [
                 CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [_buildVideoGrid(_userVideos)],
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.only(top: 2),
+                      sliver: _buildLessonList(_bookmarkedLessons),
+                    ),
+                  ],
                 ),
                 CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [_buildVideoGrid(_likedVideos)],
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                      sliver: _buildVideoGrid(_likedVideos),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(6, 2, 0, 0),
+                        child: Text(
+                          'Long press a thumbnail to view the lesson',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
