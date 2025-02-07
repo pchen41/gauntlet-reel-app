@@ -8,6 +8,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'providers/theme_provider.dart';
+import 'providers/chat_provider.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 
@@ -25,8 +26,11 @@ void main() async {
   );
   
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
+      ],
       child: const MyApp(),
     ),
   );

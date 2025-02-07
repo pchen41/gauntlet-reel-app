@@ -1,18 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class Message {
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
-
-  Message({
-    required this.text,
-    required this.isUser,
-    required this.timestamp,
-  });
-}
+import 'package:provider/provider.dart';
+import '../../../providers/chat_provider.dart';
 
 class CoachAIScreen extends StatefulWidget {
   const CoachAIScreen({super.key});
@@ -24,14 +12,6 @@ class CoachAIScreen extends StatefulWidget {
 class _CoachAIScreenState extends State<CoachAIScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
-  final List<Message> _messages = [
-    Message(
-      text: "Hello! I'm your ClimbCoach AI assistant. How can I help you today?",
-      isUser: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-  ];
 
   @override
   void dispose() {
@@ -44,37 +24,11 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    setState(() {
-      _isLoading = true;
-      _messages.add(Message(
-        text: message,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
-      _messageController.clear();
-    });
+    final chatProvider = context.read<ChatProvider>();
+    _messageController.clear();
 
     try {
-      final functions = FirebaseFunctions.instance;
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final result = await functions.httpsCallable('coachAIChatGenkit').call({
-        'message': message,
-        'uid': user.uid,
-      });
-
-      if (!mounted) return;
-
-      setState(() {
-        _messages.add(Message(
-          text: result.data['response'].toString(),
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
+      await chatProvider.sendMessage(message);
     } catch (e) {
       if (!mounted) return;
       
@@ -84,20 +38,6 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
           backgroundColor: Colors.red,
         ),
       );
-
-      setState(() {
-        _messages.add(Message(
-          text: "I apologize, but I encountered an error. Please try again.",
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
 
     // Scroll to bottom after sending message
@@ -124,7 +64,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 2.0),
               child: CircleAvatar(
-                backgroundColor: Colors.grey[800], // Darker gray for coach avatar
+                backgroundColor: Colors.grey[800],
                 child: const Icon(Icons.auto_awesome, color: Colors.white),
               ),
             ),
@@ -136,15 +76,13 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
               decoration: BoxDecoration(
                 color: message.isUser
                     ? Theme.of(context).colorScheme.primary
-                    : Colors.grey[200], // Light gray background for AI messages
+                    : Colors.grey[200],
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 message.text,
                 style: TextStyle(
-                  color: message.isUser
-                      ? Colors.white
-                      : Colors.black87, // Darker text for better contrast
+                  color: message.isUser ? Colors.white : Colors.black87,
                 ),
               ),
             ),
@@ -152,7 +90,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
           if (message.isUser) ...[
             const SizedBox(width: 8),
             Padding(
-              padding: const EdgeInsets.only(top: 2.0),  // Half of the message bubble's padding for middle alignment
+              padding: const EdgeInsets.only(top: 2.0),
               child: CircleAvatar(
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 child: const Icon(Icons.person, color: Colors.white),
@@ -170,62 +108,65 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
       appBar: AppBar(
         title: const Text('Coach AI Chat'),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: _messages.length,
-              itemBuilder: (context, index) => _buildMessage(_messages[index]),
+      body: Consumer<ChatProvider>(
+        builder: (context, chatProvider, child) => Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                itemCount: chatProvider.messages.length,
+                itemBuilder: (context, index) => 
+                    _buildMessage(chatProvider.messages[index]),
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 24.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    enabled: !_isLoading,
-                    decoration: InputDecoration(
-                      hintText: 'Ask Coach AI...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 24.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      enabled: !chatProvider.isLoading,
+                      decoration: InputDecoration(
+                        hintText: 'Ask Coach AI...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                      onSubmitted: (_) => _sendMessage(),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  height: 48, // Match TextField height
-                  width: 48,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(24),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: IconButton(
+                      icon: chatProvider.isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.send),
+                      onPressed: chatProvider.isLoading ? null : _sendMessage,
+                    ),
                   ),
-                  child: IconButton(
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.send),
-                    onPressed: _isLoading ? null : _sendMessage,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
