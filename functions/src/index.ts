@@ -10,9 +10,15 @@
 import {onCall} from "firebase-functions/v2/https";
 import {defineString} from "firebase-functions/params";
 import { ChatOpenAI } from "@langchain/openai";
-import { StateGraph, Annotation } from "@langchain/langgraph";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { logger } from "firebase-functions/v2";
+import { BufferMemory } from "langchain/memory";
+import { FirestoreChatMessageHistory } from "@langchain/community/stores/message/firestore";
+import { ConversationChain } from "langchain/chains";
+import * as admin from "firebase-admin";
+
+// Initialize Firebase Admin
+admin.initializeApp();
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -30,17 +36,11 @@ export const seedLessons2 = onRequest((request, response) => {
 });*/
 
 const openAIKey = defineString("OPENAI_API_KEY");
-const firebasePrivateKey=defineString("FIREBASE_PRIVATE_KEY");
+/*const firebasePrivateKey=defineString("FIREBASE_PRIVATE_KEY");
 const firebaseClientEmail=defineString("FIREBASE_CLIENT_EMAIL");
-const firebaseProjectId=defineString("FIREBASE_PROJECT_ID");
+const firebaseProjectId=defineString("FIREBASE_PROJECT_ID");*/
 
-// Define the state annotation for our climbing coach workflow
 // call from firebase cli: coachAIChat({"data":{"message": "test"}})
-const CoachStateAnnotation = Annotation.Root({
-  message: Annotation<string>,
-  response: Annotation<string>,
-});
-
 export const coachAIChat = onCall(async (request) => {
   try {
     // Check if the user is authenticated
@@ -53,42 +53,44 @@ export const coachAIChat = onCall(async (request) => {
       throw new Error("Message is required in request data");
     }
 
+    const userId = request.auth.uid;
+
+    // Set up chat history with Firestore
+    const memory = new BufferMemory({
+      chatHistory: new FirestoreChatMessageHistory({
+        collections: ["ai_chats"],
+        docs: [userId],
+        sessionId: userId,
+        userId: request.auth.token.email || userId,
+      }),
+    });
+
     const model = new ChatOpenAI({
       modelName: "gpt-4",
       temperature: 0.1,
       apiKey: openAIKey.value(),
     });
 
-    async function generateResponse(state: typeof CoachStateAnnotation.State) {
-      const prompt = ChatPromptTemplate.fromTemplate(`
-        You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
-        
-        Climber's question: {message}
-        
-        Provide specific, actionable advice that is encouraging but realistic.
-        Always prioritize safety in your response. Respond concisely.
-      `);
+    const prompt = ChatPromptTemplate.fromTemplate(`
+      You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
       
-      const result = await prompt.pipe(model).invoke({
-        message: state.message,
-      });
+      Climber's question: {input}
       
-      return { response: result.content };
-    }
+      Provide specific, actionable advice that is encouraging but realistic.
+      Always prioritize safety in your response. Keep your response concise.
+    `);
 
-    // Build the workflow
-    const workflow = new StateGraph(CoachStateAnnotation)
-      .addNode("respond", generateResponse)
-      .addEdge("__start__", "respond")
-      .addEdge("respond", "__end__")
-      .compile();
-
-    // Run the workflow
-    const finalState = await workflow.invoke({
-      message: message,
+    const chain = new ConversationChain({ 
+      llm: model,
+      memory: memory,
+      prompt: prompt
     });
 
-    return { response: finalState.response };
+    const result = await chain.invoke({
+      input: message,
+    });
+
+    return { response: result.response };
 
   } catch (error) {
     logger.error("Error in coachAIChat:", error);
