@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class Message {
   final String text;
@@ -22,6 +23,7 @@ class CoachAIScreen extends StatefulWidget {
 class _CoachAIScreenState extends State<CoachAIScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
   final List<Message> _messages = [
     Message(
       text: "Hello! I'm your ClimbCoach AI assistant. How can I help you today?",
@@ -37,37 +39,69 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
+  Future<void> _sendMessage() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) return;
 
     setState(() {
+      _isLoading = true;
       _messages.add(Message(
-        text: _messageController.text,
+        text: message,
         isUser: true,
         timestamp: DateTime.now(),
       ));
       _messageController.clear();
     });
 
-    // Simulate AI response after a short delay
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final result = await functions.httpsCallable('coachAIChat').call({
+        'message': message,
+      });
+
       if (!mounted) return;
+
       setState(() {
         _messages.add(Message(
-          text: "I understand you're interested in that. Let me analyze and provide some specific guidance for your situation.",
+          text: result.data['response'] as String,
           isUser: false,
           timestamp: DateTime.now(),
         ));
       });
-    });
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      setState(() {
+        _messages.add(Message(
+          text: "I apologize, but I encountered an error. Please try again.",
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
 
     // Scroll to bottom after sending message
     Future.delayed(const Duration(milliseconds: 100), () {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -81,9 +115,9 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
         children: [
           if (!message.isUser) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 12.0),  // Match the message bubble's padding
+              padding: const EdgeInsets.only(top: 2.0),
               child: CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.primary,
+                backgroundColor: Colors.grey[800], // Darker gray for coach avatar
                 child: const Icon(Icons.auto_awesome, color: Colors.white),
               ),
             ),
@@ -95,7 +129,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
               decoration: BoxDecoration(
                 color: message.isUser
                     ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.surfaceVariant,
+                    : Colors.grey[200], // Light gray background for AI messages
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -103,7 +137,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                 style: TextStyle(
                   color: message.isUser
                       ? Colors.white
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                      : Colors.black87, // Darker text for better contrast
                 ),
               ),
             ),
@@ -126,40 +160,8 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text('Coach AI'),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('About Coach AI'),
-                  content: const Text(
-                    'Coach AI is your personal climbing assistant. Ask questions about:\n\n'
-                    '• Climbing techniques\n'
-                    '• Training plans\n'
-                    '• Injury prevention\n'
-                    '• Route strategies\n'
-                    '• Equipment advice\n'
-                    '• And more!\n'
-                    '\n'
-                    'Coach AI can also recommend lessons and manage goals for you.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Got it'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
+        title: const Text('Coach AI Chat'),
       ),
       body: Column(
         children: [
@@ -170,56 +172,31 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
               itemBuilder: (context, index) => _buildMessage(_messages[index]),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: 24, // Increased bottom padding
-            ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Ask Coach AI...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                    enabled: !_isLoading,
+                    decoration: const InputDecoration(
+                      hintText: 'Type your message...',
+                      border: OutlineInputBorder(),
                     ),
-                    maxLines: null,
-                    textCapitalization: TextCapitalization.sentences,
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  height: 48, // Match TextField height
-                  width: 48,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: IconButton(
-                    onPressed: _sendMessage,
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    padding: EdgeInsets.zero,
-                  ),
+                IconButton(
+                  icon: _isLoading 
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send),
+                  onPressed: _isLoading ? null : _sendMessage,
                 ),
               ],
             ),
