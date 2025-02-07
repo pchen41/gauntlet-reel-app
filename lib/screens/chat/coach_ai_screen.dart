@@ -70,7 +70,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
 
       setState(() {
         _messages.add(Message(
-          text: result.data['response'] as String,
+          text: result.data['response'].toString(),
           isUser: false,
           timestamp: DateTime.now(),
         ));
