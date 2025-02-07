@@ -16,6 +16,11 @@ import { BufferMemory } from "langchain/memory";
 import { FirestoreChatMessageHistory } from "@langchain/community/stores/message/firestore";
 import { ConversationChain } from "langchain/chains";
 import { initializeApp } from 'firebase-admin/app';
+import { firebaseAuth } from "@genkit-ai/firebase/auth";
+import { onFlow } from "@genkit-ai/firebase/functions";
+import { openAI, gpt4oMini } from "genkitx-openai";
+import { genkit } from "genkit";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 
 // Initialize Firebase Admin
 initializeApp();
@@ -61,7 +66,7 @@ export const coachAIChat = onCall(async (request) => {
         collections: ["ai_chats"],
         docs: [userId],
         sessionId: userId,
-        userId: request.auth.token.email || userId,
+        userId: userId,
       }),
       aiPrefix: "Coach",
       humanPrefix: "Climber",
@@ -103,3 +108,55 @@ export const coachAIChat = onCall(async (request) => {
     throw new Error("Internal server error");
   }
 })
+
+
+const ai = genkit({
+  plugins: [openAI({ apiKey: openAIKey.value() })],
+  // specify a default model if not provided in generate params:
+  model: gpt4oMini,
+});
+
+export const coachAIChatGenkit = onFlow(
+  ai,
+  {
+    name: "coachAIChatGenkit",
+    authPolicy: firebaseAuth((auth, input) => {
+      if (!auth || auth.uid !== input.uid) {
+        throw new Error("Not authorized")
+      }
+    })
+  },
+  async (input: {uid: string, message: string}) => {
+    const userId = input.uid
+    const firestoreHistory = new FirestoreChatMessageHistory({
+      collections: ["ai_chats"],
+      docs: [userId],
+      sessionId: userId,
+      userId: userId,
+    });
+
+    const history = (await firestoreHistory.getMessages()).map((message) => (
+      `${message.getType() == "human" ? "Climber" : "Coach"}: ${message.content.toString()}\n`
+    ))
+
+    const prompt = `
+      You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
+
+      Current conversation:
+      ${history.join("")}
+
+      Climber's question: ${input.message}
+      
+      When asked, provide specific, actionable advice that is encouraging but realistic.
+      Keep your response concise. Try to stay under 3 sentences.
+    `
+
+    const response = await ai.generate(prompt)
+
+    firestoreHistory.addMessages([
+      new HumanMessage(input.message),
+      new AIMessage(response.text),
+    ])
+    return response.text
+  }
+)
