@@ -15,10 +15,10 @@ import { logger } from "firebase-functions/v2";
 import { BufferMemory } from "langchain/memory";
 import { FirestoreChatMessageHistory } from "@langchain/community/stores/message/firestore";
 import { ConversationChain } from "langchain/chains";
-import * as admin from "firebase-admin";
+import { initializeApp } from 'firebase-admin/app';
 
 // Initialize Firebase Admin
-admin.initializeApp();
+initializeApp();
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -63,21 +63,27 @@ export const coachAIChat = onCall(async (request) => {
         sessionId: userId,
         userId: request.auth.token.email || userId,
       }),
+      aiPrefix: "Coach",
+      humanPrefix: "Climber",
+      memoryKey: "history",
     });
 
     const model = new ChatOpenAI({
-      modelName: "gpt-4",
+      modelName: "gpt-4o-mini",
       temperature: 0.1,
       apiKey: openAIKey.value(),
     });
 
     const prompt = ChatPromptTemplate.fromTemplate(`
       You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
-      
+
+      Current conversation:
+      {history}
+
       Climber's question: {input}
       
-      Provide specific, actionable advice that is encouraging but realistic.
-      Always prioritize safety in your response. Keep your response concise.
+      When asked, provide specific, actionable advice that is encouraging but realistic.
+      Keep your response concise. Try to stay under 3 sentences.
     `);
 
     const chain = new ConversationChain({ 
@@ -86,7 +92,7 @@ export const coachAIChat = onCall(async (request) => {
       prompt: prompt
     });
 
-    const result = await chain.invoke({
+    const result = await chain.call({
       input: message,
     });
 
