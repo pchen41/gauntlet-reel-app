@@ -20,6 +20,7 @@ class _LessonsScreenState extends State<LessonsScreen> {
   Map<String, bool> _bookmarkStatuses = {};
   bool _isLoading = true;
   String _searchQuery = '';
+  bool _showBookmarkedOnly = false;
 
   @override
   void initState() {
@@ -49,12 +50,25 @@ class _LessonsScreenState extends State<LessonsScreen> {
         if (mounted) {
           setState(() {
             _recentLessons = recentLessons;
+            if (_showBookmarkedOnly) {
+              _recentLessons = _recentLessons.where((lesson) => 
+                _bookmarkStatuses[lesson['id']] ?? false
+              ).toList();
+            }
+            
             _allLessons = _searchQuery.isEmpty 
                 ? allLessons 
                 : allLessons.where((lesson) => 
                     lesson['title'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
                     lesson['description'].toString().toLowerCase().contains(_searchQuery.toLowerCase())
                   ).toList();
+            
+            if (_showBookmarkedOnly) {
+              _allLessons = _allLessons.where((lesson) => 
+                _bookmarkStatuses[lesson['id']] ?? false
+              ).toList();
+            }
+            
             _bookmarkStatuses = bookmarkStatuses;
             _isLoading = false;
           });
@@ -166,6 +180,53 @@ class _LessonsScreenState extends State<LessonsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lessons'),
+        actions: [
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.filter_list),
+            offset: const Offset(0, 40),
+            initialValue: _showBookmarkedOnly,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF2C2C2C)
+                : null,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                padding: EdgeInsets.zero,
+                height: 40,
+                child: Container(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2C2C2C)
+                      : null,
+                  child: StatefulBuilder(
+                    builder: (context, setState) => CheckboxListTile(
+                      title: Text(
+                        'Bookmarked',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        ),
+                      ),
+                      value: _showBookmarkedOnly,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (bool? value) {
+                        this.setState(() {
+                          _showBookmarkedOnly = value ?? false;
+                          _loadLessons();
+                        });
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
