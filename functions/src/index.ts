@@ -153,10 +153,10 @@ export const coachAIChatGenkit = onFlow(
 
     const response = await ai.generate(prompt)
 
-    firestoreHistory.addMessages([
+    await firestoreHistory.addMessages([
       new HumanMessage(input.message),
       new AIMessage(response.text),
     ])
-    return response.text
+    return {response: response.text}
   }
 )

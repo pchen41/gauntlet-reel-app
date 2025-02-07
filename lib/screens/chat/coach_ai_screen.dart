@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Message {
   final String text;
@@ -55,8 +56,14 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
 
     try {
       final functions = FirebaseFunctions.instance;
-      final result = await functions.httpsCallable('coachAIChat').call({
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final result = await functions.httpsCallable('coachAIChatGenkit').call({
         'message': message,
+        'uid': user.uid,
       });
 
       if (!mounted) return;
