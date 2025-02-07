@@ -37,9 +37,14 @@ const ai = genkit({
 const getLessons = ai.defineTool(
   {
     name: "getLessons",
-    description: "Fetchs a list of lessons that the climber can watch. Each lesson is a collection of videos about a topic.",
+    description: "Fetchs a list of lessons that the climber can watch.",
     inputSchema: z.object({}),
-    outputSchema: z.array(z.object({ title: z.string(), description: z.string(), id: z.string() }))
+    outputSchema: z.array(
+      z.object({ 
+        title: z.string(), 
+        description: z.string(), 
+        id: z.string()
+      })).describe("A list of lessons, where each lesson is a series of videos about a topic.")
   },
   async () => {
     return await db.collection("lessons").get().then((snapshot) => {
@@ -196,7 +201,6 @@ export const coachAIChatGenkit = onFlow(
       You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
       You are chatting to a climber that is using an app called "ClimbCoach".
       This app allows the climber improve their climbing skills by setting goals for themselves and watching lessons.
-      Each goal consists of a list of tasks that the climber needs to accomplish to reach their goal. Please refer to these tasks as objectives when possible.
       Please do not fetch lessons or goals unless very relevant to the climber's question.
 
       Current conversation:
