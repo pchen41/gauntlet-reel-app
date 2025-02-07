@@ -120,150 +120,155 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
       );
     }
 
-    return ListView.builder(
-      itemCount: videos.length,
-      itemBuilder: (context, index) {
-        final video = videos[index];
-        final isLiked = _videoLikeStatuses[video['id']] ?? false;
-        final thumbnailUrl = video['thumbnail_url'];
-        final double thumbnailWidth = 78.0;
-        
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[700]!
-                  : Colors.grey[300]!,
-              width: 1,
+    return Container(
+      color: Theme.of(context).brightness == Brightness.dark
+          ? null
+          : Colors.white,
+      child: ListView.builder(
+        itemCount: videos.length,
+        itemBuilder: (context, index) {
+          final video = videos[index];
+          final isLiked = _videoLikeStatuses[video['id']] ?? false;
+          final thumbnailUrl = video['thumbnail_url'];
+          final double thumbnailWidth = 78.0;
+          
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16.0),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[700]!
+                    : Colors.grey[400]!,
+                width: 1,
+              ),
             ),
-          ),
-          child: InkWell(
-            onTap: () async {
-              final user = FirebaseAuth.instance.currentUser;
-              if (user != null) {
-                await _lessonService.updateLessonView(
-                  user.uid,
-                  widget.lessonId,
-                  index,
-                );
-              }
+            child: InkWell(
+              onTap: () async {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  await _lessonService.updateLessonView(
+                    user.uid,
+                    widget.lessonId,
+                    index,
+                  );
+                }
 
-              // Convert lesson videos to VideoModel list
-              final lessonVideos = (_lessonData!['videos'] as List)
-                  .map((video) => VideoModel(
-                        id: video['id'],
-                        uid: video['uid'] ?? '',
-                        title: video['title'] ?? '',
-                        description: video['description'] ?? '',
-                        url: video['url'] ?? '',
-                        thumbnailUrl: video['thumbnail_url'],
-                        createdAt: video['created_at'] as Timestamp? ?? 
-                            Timestamp.fromDate(DateTime.now()),
-                      ))
-                  .toList();
+                // Convert lesson videos to VideoModel list
+                final lessonVideos = (_lessonData!['videos'] as List)
+                    .map((video) => VideoModel(
+                          id: video['id'],
+                          uid: video['uid'] ?? '',
+                          title: video['title'] ?? '',
+                          description: video['description'] ?? '',
+                          url: video['url'] ?? '',
+                          thumbnailUrl: video['thumbnail_url'],
+                          createdAt: video['created_at'] as Timestamp? ?? 
+                              Timestamp.fromDate(DateTime.now()),
+                        ))
+                    .toList();
 
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoFeedScreen(
-                    videos: lessonVideos,
-                    initialIndex: index,
-                  ),
-                ),
-              );
-            },
-            child: SizedBox(
-              height: 75,
-              child: Row(
-                children: [
-                  if (thumbnailUrl != null)
-                    SizedBox(
-                      width: thumbnailWidth,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                        child: Image.network(
-                          thumbnailUrl,
-                          fit: BoxFit.cover,
-                          height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: Colors.grey[300],
-                              child: const Center(
-                                child: Icon(Icons.error_outline),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VideoFeedScreen(
+                      videos: lessonVideos,
+                      initialIndex: index,
                     ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16.0, 12.0, 56.0, 12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                video['title'] ?? '',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16.0,
+                  ),
+                );
+              },
+              child: SizedBox(
+                height: 75,
+                child: Row(
+                  children: [
+                    if (thumbnailUrl != null)
+                      SizedBox(
+                        width: thumbnailWidth,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                          child: Image.network(
+                            thumbnailUrl,
+                            fit: BoxFit.cover,
+                            height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: Icon(Icons.error_outline),
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Expanded(
-                                child: Text(
-                                  video['description'] ?? '',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Theme.of(context).brightness == Brightness.dark
-                                        ? Colors.grey[400]
-                                        : Colors.grey[600],
-                                  ),
-                                ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
-                        Positioned(
-                          top: 0,
-                          bottom: 0,
-                          right: 8,
-                          child: Center(
-                            child: GestureDetector(
-                              onTap: () => _toggleLike(video['id']),
-                              behavior: HitTestBehavior.opaque,
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Icon(
-                                  isLiked ? Icons.favorite : Icons.favorite_border,
-                                  color: isLiked 
-                                      ? Theme.of(context).colorScheme.secondary
-                                      : Theme.of(context).brightness == Brightness.dark
+                      ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16.0, 12.0, 56.0, 12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  video['title'] ?? '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16.0,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Expanded(
+                                  child: Text(
+                                    video['description'] ?? '',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Theme.of(context).brightness == Brightness.dark
                                           ? Colors.grey[400]
                                           : Colors.grey[600],
-                                  size: 24,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            right: 8,
+                            child: Center(
+                              child: GestureDetector(
+                                onTap: () => _toggleLike(video['id']),
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Icon(
+                                    isLiked ? Icons.favorite : Icons.favorite_border,
+                                    color: isLiked 
+                                        ? Colors.red
+                                        : Theme.of(context).brightness == Brightness.dark
+                                            ? Colors.grey[400]
+                                            : Colors.grey[600],
+                                    size: 24,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

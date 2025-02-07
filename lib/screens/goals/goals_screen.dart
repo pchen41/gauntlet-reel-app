@@ -99,6 +99,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
           final goal = filteredGoals[index];
           final completedTasks = goal.tasks.where((task) => task.completed).length;
           final allTasksCompleted = completedTasks == goal.tasks.length && goal.tasks.isNotEmpty;
+          final progress = goal.tasks.isNotEmpty ? completedTasks / goal.tasks.length : 0.0;
           
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 14),
@@ -108,28 +109,58 @@ class _GoalsScreenState extends State<GoalsScreen> {
               side: BorderSide(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.grey[700]!
-                    : Colors.grey[300]!,
+                    : Colors.grey[400]!,
                 width: 1,
               ),
             ),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16.0),
+              contentPadding: EdgeInsets.fromLTRB(16, completedTasks > 0 ? 4 : 0, 16, completedTasks > 0 ? 8 : 4),
               title: Text(
                 goal.name,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16.0,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              subtitle: Text(
-                '$completedTasks of ${goal.tasks.length} tasks completed',
-                style: TextStyle(
-                  color: allTasksCompleted
-                      ? Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFF81C784) // Lighter green for dark mode
-                          : const Color(0xFF2E7D32) // Darker green for light mode
-                      : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
-                ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 4),
+                  Text(
+                    '$completedTasks of ${goal.tasks.length} tasks completed',
+                    style: TextStyle(
+                      fontSize: 13.0,
+                      color: allTasksCompleted
+                          ? Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF81C784) // Lighter green for dark mode
+                              : const Color(0xFF2E7D32) // Darker green for light mode
+                          : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                    ),
+                  ),
+                  if (completedTasks > 0) ...[
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey[800]
+                            : Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          allTasksCompleted
+                              ? Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFF81C784) // Lighter green for dark mode
+                                  : const Color(0xFF2E7D32) // Darker green for light mode
+                              : Theme.of(context).colorScheme.primary,
+                        ),
+                        minHeight: 4,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               onTap: () async {
                 await Navigator.push(

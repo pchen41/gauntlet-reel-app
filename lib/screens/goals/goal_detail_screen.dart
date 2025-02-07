@@ -6,10 +6,12 @@ import '../lessons/lesson_detail_screen.dart';
 
 class GoalDetailScreen extends StatefulWidget {
   final Goal goal;
+  final VoidCallback? onTasksModified;
 
   const GoalDetailScreen({
     super.key,
     required this.goal,
+    this.onTasksModified,
   });
 
   @override
@@ -49,6 +51,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       try {
         await _goalService.addTask(widget.goal.id, task);
         await _refreshGoal();
+        widget.onTasksModified?.call();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -73,6 +76,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         updatedTasks.map((task) => task.toMap()).toList(),
       );
       await _refreshGoal();
+      widget.onTasksModified?.call();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +96,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         widget.goal.id,
         _tasks.map((task) => task.toMap()).toList(),
       );
+      widget.onTasksModified?.call();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -121,6 +126,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           updatedTasks.map((t) => t.toMap()).toList(),
         );
         await _refreshGoal();
+        widget.onTasksModified?.call();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,6 +246,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                   widget.goal.id,
                   _tasks.map((task) => task.toMap()).toList(),
                 );
+                widget.onTasksModified?.call();
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(

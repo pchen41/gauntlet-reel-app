@@ -6,6 +6,7 @@ import '../../models/goal_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../lessons/lesson_detail_screen.dart';
 import '../goals/goal_detail_screen.dart';
+import '../chat/coach_ai_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -96,13 +97,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         int objectives = 0;
         int completedGoals = 0;
         
-        for (final goal in goals) {
+        // Filter out completed goals
+        final activeGoals = goals.where((goal) {
           final tasks = (goal['tasks'] as List<dynamic>?) ?? [];
+          final isCompleted = tasks.isNotEmpty && tasks.every((task) => task['completed'] == true);
+          
+          // Count objectives and completed goals for the progress message
           objectives += tasks.where((task) => task['completed'] == true).length;
-          if (tasks.isNotEmpty && tasks.every((task) => task['completed'] == true)) {
-            completedGoals++;
-          }
-        }
+          if (isCompleted) completedGoals++;
+          
+          // Only keep incomplete goals
+          return !isCompleted;
+        }).toList();
 
         final viewedLessons = await _lessonService.getRecentlyViewedLessons(user.uid);
         final userData = await _userService.getUser(user.uid);
@@ -115,7 +121,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           _viewedLessons = viewedLessons.length;
           _userName = name;
           _recentLessons = viewedLessons;
-          _goals = goals.take(3).toList(); // Take the 3 most recent goals
+          _goals = activeGoals.take(2).toList();
           _isLoading = false;
         });
       }
@@ -137,7 +143,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         side: BorderSide(
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.grey[700]!
-              : Colors.grey[300]!,
+              : Colors.grey[400]!,
           width: 1,
         ),
       ),
@@ -221,6 +227,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     final completedTasks = goal.tasks.where((task) => task.completed).length;
     final totalTasks = goal.tasks.length;
     final allTasksCompleted = completedTasks == totalTasks && totalTasks > 0;
+    final progress = totalTasks > 0 ? completedTasks / totalTasks : 0.0;
     
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
@@ -230,12 +237,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         side: BorderSide(
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.grey[700]!
-              : Colors.grey[300]!,
+              : Colors.grey[400]!,
           width: 1,
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+        contentPadding: EdgeInsets.fromLTRB(16, completedTasks > 0 ? 4 : 0, 16, completedTasks > 0 ? 8 : 4),
         title: Text(
           goal.name,
           style: const TextStyle(
@@ -245,21 +252,52 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
-          '$completedTasks of $totalTasks tasks completed',
-          style: TextStyle(
-            color: allTasksCompleted
-                ? Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF81C784) // Lighter green for dark mode
-                    : const Color(0xFF2E7D32) // Darker green for light mode
-                : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              '$completedTasks of $totalTasks tasks completed',
+              style: TextStyle(
+                fontSize: 13.0,
+                color: allTasksCompleted
+                    ? Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF81C784) // Lighter green for dark mode
+                        : const Color(0xFF2E7D32) // Darker green for light mode
+                    : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+              ),
+            ),
+            if (completedTasks > 0) ...[
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[800]
+                      : Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    allTasksCompleted
+                        ? Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF81C784) // Lighter green for dark mode
+                            : const Color(0xFF2E7D32) // Darker green for light mode
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                  minHeight: 4,
+                ),
+              ),
+            ],
+          ],
         ),
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => GoalDetailScreen(goal: goal),
+              builder: (context) => GoalDetailScreen(
+                goal: goal,
+                onTasksModified: _loadUserProgress,
+              ),
             ),
           );
         },
@@ -270,6 +308,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CoachAIScreen(),
+            ),
+          );
+        },
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('Coach AI'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -311,15 +362,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           children: _buildProgressSpans(context),
                         ),
                       ),
-                      if (_goals.isNotEmpty) ...[
-                        const SizedBox(height: 32),
-                        Text(
-                          'Top Goals',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        ...(_goals.take(2).map((g) => _buildGoalCard(g)).toList()),
-                      ],
                       if (_recentLessons.isNotEmpty) ...[
                         const SizedBox(height: 32),
                         Text(
@@ -328,6 +370,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         ...(_recentLessons.take(2).map(_buildLessonCard).toList()),
+                      ],
+                      if (_goals.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        Text(
+                          'Top Goals',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ...(_goals.take(2).map((g) => _buildGoalCard(g)).toList()),
                       ],
                     ],
                   ),

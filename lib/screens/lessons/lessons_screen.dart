@@ -111,14 +111,14 @@ class _LessonsScreenState extends State<LessonsScreen> {
     final double thumbnailWidth = 95.0;
     
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16.0),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.grey[700]!
-              : Colors.grey[300]!,
+              : Colors.grey[400]!,
           width: 1,
         ),
       ),
