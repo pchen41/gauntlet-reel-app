@@ -1,6 +1,6 @@
 {
-    "name": "reels_app",
-    "short_name": "reels_app",
+    "name": "ClimbCoach",
+    "short_name": "ClimbCoach",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

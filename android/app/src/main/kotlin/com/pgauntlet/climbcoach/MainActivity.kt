@@ -1,4 +1,4 @@
-package com.example.reels_app
+package com.pgauntlet.climbcoach
 
 import io.flutter.embedding.android.FlutterActivity
 

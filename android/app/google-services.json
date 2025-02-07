@@ -26,6 +26,25 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:77080749785:android:2b04d98b5ea0f4803940c8",
+        "android_client_info": {
+          "package_name": "com.pgauntlet.climbcoach"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDm2RALWNRI49TvTWmfFy67jLFB43QLP-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:77080749785:android:2059660448f7e6123940c8",
         "android_client_info": {
           "package_name": "com.pgauntlet.reelapp"
