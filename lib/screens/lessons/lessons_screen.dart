@@ -107,6 +107,8 @@ class _LessonsScreenState extends State<LessonsScreen> {
 
   Widget _buildLessonCard(Map<String, dynamic> lesson) {
     final isBookmarked = _bookmarkStatuses[lesson['id']] ?? false;
+    final thumbnailUrl = lesson['thumbnail_url'];
+    final double thumbnailWidth = 95.0;
     
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
@@ -120,57 +122,103 @@ class _LessonsScreenState extends State<LessonsScreen> {
           width: 1,
         ),
       ),
-      child: Stack(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16.0, 2, 56.0, 2),
-            title: Text(
-              lesson['title'] ?? '',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16.0,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LessonDetailScreen(
+                lessonId: lesson['id'],
               ),
             ),
-            subtitle: Text(
-              lesson['description'] ?? '',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LessonDetailScreen(
-                    lessonId: lesson['id'],
+          );
+        },
+        child: SizedBox(
+          height: 95,
+          child: Row(
+            children: [
+              if (thumbnailUrl != null)
+                SizedBox(
+                  width: thumbnailWidth,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                    child: Image.network(
+                      thumbnailUrl,
+                      fit: BoxFit.cover,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(Icons.error_outline),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              );
-            },
-          ),
-          Positioned(
-            top: 0,
-            bottom: 0,
-            right: 8,
-            child: Center(
-              child: GestureDetector(
-                onTap: () => _toggleBookmark(lesson['id']),
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Icon(
-                    isBookmarked ? Icons.bookmark : Icons.bookmark_outline,
-                    color: isBookmarked 
-                        ? Theme.of(context).colorScheme.secondary
-                        : Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey[400]
-                            : Colors.grey[600],
-                    size: 24,
-                  ),
+              Expanded(
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 12.0, 56.0, 12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            lesson['title'] ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16.0,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Expanded(
+                            child: Text(
+                              lesson['description'] ?? '',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.grey[400]
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: 8,
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: () => _toggleBookmark(lesson['id']),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Icon(
+                              isBookmarked ? Icons.bookmark : Icons.bookmark_outline,
+                              color: isBookmarked 
+                                  ? Theme.of(context).colorScheme.secondary
+                                  : Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

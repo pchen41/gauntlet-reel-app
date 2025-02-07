@@ -125,6 +125,8 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
       itemBuilder: (context, index) {
         final video = videos[index];
         final isLiked = _videoLikeStatuses[video['id']] ?? false;
+        final thumbnailUrl = video['thumbnail_url'];
+        final double thumbnailWidth = 78.0;
         
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
@@ -138,99 +140,127 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
               width: 1,
             ),
           ),
-          child: Stack(
-            children: [
-              ListTile(
-                contentPadding: const EdgeInsets.fromLTRB(16.0, 10.0, 72.0, 10.0),
-                leading: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(8),
-                    image: video['thumbnail_url'] != null
-                        ? DecorationImage(
-                            image: NetworkImage(video['thumbnail_url']),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: video['thumbnail_url'] == null
-                      ? const Center(
-                          child: Icon(Icons.play_arrow),
-                        )
-                      : null,
-                ),
-                title: Text(
-                  video['title'] ?? '',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                subtitle: Text(
-                  video['description'] ?? '',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () async {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    await _lessonService.updateLessonView(
-                      user.uid,
-                      widget.lessonId,
-                      index,
-                    );
-                  }
+          child: InkWell(
+            onTap: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                await _lessonService.updateLessonView(
+                  user.uid,
+                  widget.lessonId,
+                  index,
+                );
+              }
 
-                  // Convert lesson videos to VideoModel list
-                  final lessonVideos = (_lessonData!['videos'] as List)
-                      .map((video) => VideoModel(
-                            id: video['id'],
-                            uid: video['uid'] ?? '',
-                            title: video['title'] ?? '',
-                            description: video['description'] ?? '',
-                            url: video['url'] ?? '',
-                            thumbnailUrl: video['thumbnail_url'],
-                            createdAt: video['created_at'] as Timestamp? ?? 
-                                Timestamp.fromDate(DateTime.now()),
-                          ))
-                      .toList();
+              // Convert lesson videos to VideoModel list
+              final lessonVideos = (_lessonData!['videos'] as List)
+                  .map((video) => VideoModel(
+                        id: video['id'],
+                        uid: video['uid'] ?? '',
+                        title: video['title'] ?? '',
+                        description: video['description'] ?? '',
+                        url: video['url'] ?? '',
+                        thumbnailUrl: video['thumbnail_url'],
+                        createdAt: video['created_at'] as Timestamp? ?? 
+                            Timestamp.fromDate(DateTime.now()),
+                      ))
+                  .toList();
 
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => VideoFeedScreen(
-                        videos: lessonVideos,
-                        initialIndex: index,
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VideoFeedScreen(
+                    videos: lessonVideos,
+                    initialIndex: index,
+                  ),
+                ),
+              );
+            },
+            child: SizedBox(
+              height: 75,
+              child: Row(
+                children: [
+                  if (thumbnailUrl != null)
+                    SizedBox(
+                      width: thumbnailWidth,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                        child: Image.network(
+                          thumbnailUrl,
+                          fit: BoxFit.cover,
+                          height: double.infinity,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Icon(Icons.error_outline),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  );
-                },
-              ),
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 8,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () => _toggleLike(video['id']),
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked 
-                            ? Colors.red[400]
-                            : Theme.of(context).brightness == Brightness.dark
-                                ? Colors.grey[400]
-                                : Colors.grey[600],
-                        size: 24,
-                      ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16.0, 12.0, 56.0, 12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                video['title'] ?? '',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16.0,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Expanded(
+                                child: Text(
+                                  video['description'] ?? '',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          bottom: 0,
+                          right: 8,
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () => _toggleLike(video['id']),
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Icon(
+                                  isLiked ? Icons.favorite : Icons.favorite_border,
+                                  color: isLiked 
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Theme.of(context).brightness == Brightness.dark
+                                          ? Colors.grey[400]
+                                          : Colors.grey[600],
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },

@@ -7,10 +7,43 @@ class LessonService {
     final QuerySnapshot snapshot = await _firestore.collection('lessons')
         .orderBy('created_at', descending: true)
         .get();
-    return snapshot.docs.map((doc) => {
+    
+    List<Map<String, dynamic>> lessons = snapshot.docs.map((doc) => {
       'id': doc.id,
       ...doc.data() as Map<String, dynamic>
     }).toList();
+
+    // Collect all first video IDs
+    Set<String> firstVideoIds = {};
+    for (var lesson in lessons) {
+      final List<String> videoIds = List<String>.from(lesson['videos'] ?? []);
+      if (videoIds.isNotEmpty) {
+        firstVideoIds.add(videoIds[0]);
+      }
+    }
+
+    if (firstVideoIds.isNotEmpty) {
+      // Fetch all thumbnails in a single query
+      final QuerySnapshot videosSnapshot = await _firestore.collection('videos')
+          .where(FieldPath.documentId, whereIn: firstVideoIds.toList())
+          .get();
+
+      // Create a map of video IDs to thumbnail URLs
+      final Map<String, String> thumbnailMap = {
+        for (var doc in videosSnapshot.docs)
+          doc.id: doc.get('thumbnail_url') as String
+      };
+
+      // Update lessons with thumbnails
+      for (var lesson in lessons) {
+        final List<String> videoIds = List<String>.from(lesson['videos'] ?? []);
+        if (videoIds.isNotEmpty && thumbnailMap.containsKey(videoIds[0])) {
+          lesson['thumbnail_url'] = thumbnailMap[videoIds[0]];
+        }
+      }
+    }
+
+    return lessons;
   }
 
   Future<List<Map<String, dynamic>>> getRecentlyViewedLessons(String uid) async {
@@ -30,10 +63,42 @@ class LessonService {
         .where(FieldPath.documentId, whereIn: lessonIds)
         .get();
 
-    return lessonsSnapshot.docs.map((doc) => {
+    List<Map<String, dynamic>> lessons = lessonsSnapshot.docs.map((doc) => {
       'id': doc.id,
       ...doc.data() as Map<String, dynamic>
     }).toList();
+
+    // Collect all first video IDs
+    Set<String> firstVideoIds = {};
+    for (var lesson in lessons) {
+      final List<String> videoIds = List<String>.from(lesson['videos'] ?? []);
+      if (videoIds.isNotEmpty) {
+        firstVideoIds.add(videoIds[0]);
+      }
+    }
+
+    if (firstVideoIds.isNotEmpty) {
+      // Fetch all thumbnails in a single query
+      final QuerySnapshot videosSnapshot = await _firestore.collection('videos')
+          .where(FieldPath.documentId, whereIn: firstVideoIds.toList())
+          .get();
+
+      // Create a map of video IDs to thumbnail URLs
+      final Map<String, String> thumbnailMap = {
+        for (var doc in videosSnapshot.docs)
+          doc.id: doc.get('thumbnail_url') as String
+      };
+
+      // Update lessons with thumbnails
+      for (var lesson in lessons) {
+        final List<String> videoIds = List<String>.from(lesson['videos'] ?? []);
+        if (videoIds.isNotEmpty && thumbnailMap.containsKey(videoIds[0])) {
+          lesson['thumbnail_url'] = thumbnailMap[videoIds[0]];
+        }
+      }
+    }
+
+    return lessons;
   }
 
   Future<List<Map<String, dynamic>>> searchLessons(String query) async {
