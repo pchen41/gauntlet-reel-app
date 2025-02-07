@@ -287,6 +287,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   minHeight: 4,
                 ),
               ),
+              const SizedBox(height: 1.5), // Added additional padding after progress bar
             ],
           ],
         ),
