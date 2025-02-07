@@ -28,6 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late TabController _tabController;
   UserModel? _user;
   bool _isLoading = true;
+  bool _isUploadingVideo = false;
   List<Map<String, dynamic>> _bookmarkedLessons = [];
   List<Map<String, dynamic>> _likedVideos = [];
   Map<String, Map<String, dynamic>> _videoLessons = {};  // Map of video ID to lesson data
@@ -329,108 +330,188 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: Consumer<ThemeProvider>(
-              builder: (context, themeProvider, child) {
-                return Icon(
-                  themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                );
-              },
-            ),
-            onPressed: () {
-              final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-              themeProvider.toggleTheme();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _authService.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // User Info Section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Text(
-                  _user?.name ?? 'Loading...',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: const Text('Profile'),
+            actions: [
+              if (_user?.email == 'peter.chen@gauntletai.com')
+                IconButton(
+                  icon: const Icon(Icons.upload),
+                  onPressed: () async {
+                    FilePickerResult? result = await FilePicker.platform.pickFiles(
+                      type: FileType.video,
+                      allowMultiple: false,
+                    );
+
+                    if (result != null) {
+                      final file = File(result.files.single.path!);
+                      
+                      // Show dialog for video details
+                      final details = await showDialog<Map<String, String>>(
+                        context: context,
+                        builder: (context) => _VideoDetailsDialog(),
+                      );
+
+                      if (details != null && mounted) {
+                        setState(() {
+                          _isUploadingVideo = true;
+                        });
+                        
+                        try {
+                          await _videoService.uploadVideo(
+                            videoFile: file,
+                            title: details['title']!,
+                            description: details['description'] ?? '',
+                            userId: _authService.currentUser!.uid,
+                          );
+                          
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Video uploaded successfully')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error uploading video: $e')),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() {
+                              _isUploadingVideo = false;
+                            });
+                          }
+                        }
+                      }
+                    }
+                  },
                 ),
-                Text(
-                  _user?.email ?? 'Loading...',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
-                  ),
+              IconButton(
+                icon: Consumer<ThemeProvider>(
+                  builder: (context, themeProvider, child) {
+                    return Icon(
+                      themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                    );
+                  },
                 ),
-              ],
-            ),
+                onPressed: () {
+                  final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+                  themeProvider.toggleTheme();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: () async {
+                  await _authService.signOut();
+                  Navigator.pushReplacementNamed(context, '/login');
+                },
+              ),
+            ],
           ),
-          Container(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Bookmarked'),
-                Tab(text: 'Liked'),
-              ],
-              dividerColor: Theme.of(context).dividerColor.withOpacity(0.1),
-            ),
-          ),
-          // Scrollable content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.only(top: 2),
-                      sliver: _buildLessonList(_bookmarkedLessons),
+          body: Column(
+            children: [
+              // User Info Section
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text(
+                      _user?.name ?? 'Loading...',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ],
-                ),
-                CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-                      sliver: _buildVideoGrid(_likedVideos),
-                    ),
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(6, 2, 0, 0),
-                        child: Text(
-                          'Long press a thumbnail to view the lesson',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
+                    Text(
+                      _user?.email ?? 'Loading...',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
+              Container(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: 'Bookmarked'),
+                    Tab(text: 'Liked'),
+                  ],
+                  dividerColor: Theme.of(context).dividerColor.withOpacity(0.1),
+                ),
+              ),
+              // Scrollable content
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.only(top: 2),
+                          sliver: _buildLessonList(_bookmarkedLessons),
+                        ),
+                      ],
+                    ),
+                    CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                          sliver: _buildVideoGrid(_likedVideos),
+                        ),
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(6, 2, 0, 0),
+                            child: Text(
+                              'Long press a thumbnail to view the lesson',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_isUploadingVideo)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Uploading video...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -446,7 +527,9 @@ class _VideoDetailsDialogState extends State<_VideoDetailsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
+      backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
       title: const Text('Video Details'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

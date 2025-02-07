@@ -61,13 +61,6 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
               _isLoading = false;
             });
           }
-
-          // Update lesson view
-          await _lessonService.updateLessonView(
-            user.uid,
-            widget.lessonId,
-            0,
-          );
         }
       }
     } catch (e) {
@@ -179,7 +172,16 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                onTap: () {
+                onTap: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    await _lessonService.updateLessonView(
+                      user.uid,
+                      widget.lessonId,
+                      index,
+                    );
+                  }
+
                   // Convert lesson videos to VideoModel list
                   final lessonVideos = (_lessonData!['videos'] as List)
                       .map((video) => VideoModel(

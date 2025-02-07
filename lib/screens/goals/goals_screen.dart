@@ -14,6 +14,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   final GoalService _goalService = GoalService();
   List<Goal> _goals = [];
   bool _isLoading = true;
+  bool _showCompletedGoals = true;
 
   @override
   void initState() {
@@ -58,7 +59,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
   }
 
   Widget _buildGoalList() {
-    if (_goals.isEmpty) {
+    final filteredGoals = _showCompletedGoals
+        ? _goals
+        : _goals.where((goal) => goal.tasks.any((task) => !task.completed) || goal.tasks.isEmpty).toList();
+
+    if (filteredGoals.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: Padding(
@@ -90,9 +95,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index >= _goals.length) return null;
-          final goal = _goals[index];
+          if (index >= filteredGoals.length) return null;
+          final goal = filteredGoals[index];
           final completedTasks = goal.tasks.where((task) => task.completed).length;
+          final allTasksCompleted = completedTasks == goal.tasks.length && goal.tasks.isNotEmpty;
           
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 14),
@@ -118,7 +124,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
               subtitle: Text(
                 '$completedTasks of ${goal.tasks.length} tasks completed',
                 style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  color: allTasksCompleted
+                      ? Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF81C784) // Lighter green for dark mode
+                          : const Color(0xFF2E7D32) // Darker green for light mode
+                      : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
                 ),
               ),
               onTap: () async {
@@ -133,7 +143,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
             ),
           );
         },
-        childCount: _goals.length,
+        childCount: filteredGoals.length,
       ),
     );
   }
@@ -148,9 +158,47 @@ class _GoalsScreenState extends State<GoalsScreen> {
       appBar: AppBar(
         title: const Text('Goals'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _addGoal,
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.filter_list),
+            offset: const Offset(0, 40),
+            initialValue: _showCompletedGoals,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF2C2C2C)
+                : null,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false, // Disable click-to-close behavior
+                padding: EdgeInsets.zero,
+                height: 40,
+                child: Container(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2C2C2C)
+                      : null,
+                  child: StatefulBuilder(
+                    builder: (context, setState) => CheckboxListTile(
+                      title: Text(
+                        'Completed goals',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        ),
+                      ),
+                      value: _showCompletedGoals,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (bool? value) {
+                        this.setState(() => _showCompletedGoals = value ?? true);
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -165,6 +213,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addGoal,
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -188,7 +240,9 @@ class _AddGoalDialogState extends State<AddGoalDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Dialog(
+      backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
       child: Container(
         width: 400,
         padding: const EdgeInsets.all(16),

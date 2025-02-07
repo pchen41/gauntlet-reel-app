@@ -84,21 +84,22 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   }
 
   Future<void> _deleteTask(int index) async {
-    setState(() => _isLoading = true);
+    final deletedTask = _tasks.removeAt(index);
+    setState(() {});
+
     try {
-      List<GoalTask> updatedTasks = List.from(_tasks)..removeAt(index);
       await _goalService.updateTasks(
         widget.goal.id,
-        updatedTasks.map((task) => task.toMap()).toList(),
+        _tasks.map((task) => task.toMap()).toList(),
       );
-      await _refreshGoal();
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _tasks.insert(index, deletedTask);
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error deleting task: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -135,6 +136,9 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF2C2C2C)
+            : null,
         title: const Text('Delete Goal'),
         content: const Text('Are you sure you want to delete this goal and all its tasks?'),
         actions: [
@@ -213,145 +217,154 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         title: Text(widget.goal.name),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _addTask,
-          ),
-          IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: _deleteGoal,
             tooltip: 'Delete Goal',
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ReorderableListView.builder(
-              itemCount: _tasks.length,
-              onReorder: (oldIndex, newIndex) async {
-                if (oldIndex < newIndex) {
-                  newIndex -= 1;
-                }
-                setState(() {
-                  final task = _tasks.removeAt(oldIndex);
-                  _tasks.insert(newIndex, task);
-                });
-                try {
-                  await _goalService.updateTasks(
-                    widget.goal.id,
-                    _tasks.map((task) => task.toMap()).toList(),
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error reordering tasks: $e')),
-                  );
-                  await _refreshGoal(); // Revert to server state on error
-                }
-              },
-              itemBuilder: (context, index) {
-                final task = _tasks[index];
-                return Dismissible(
-                  key: ValueKey('dismissible_${index}_${task.name}'),
-                  background: Container(
-                    color: Theme.of(context).colorScheme.error,
-                    alignment: Alignment.centerLeft,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Icon(Icons.delete, color: Colors.white),
-                    ),
-                  ),
-                  secondaryBackground: Container(
-                    color: Theme.of(context).colorScheme.error,
-                    alignment: Alignment.centerRight,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Icon(Icons.delete, color: Colors.white),
-                    ),
-                  ),
-                  onDismissed: (direction) {
-                    _deleteTask(index);
-                  },
-                  child: Card(
-                    key: ValueKey('card_${index}_${task.name}'),
-                    elevation: 0,
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.grey[700]!
-                            : Colors.grey[300]!,
-                        width: 1,
-                      ),
-                    ),
-                    child: ListTile(
-                      leading: ReorderableDragStartListener(
-                        index: index,
-                        child: const Icon(Icons.drag_handle),
-                      ),
-                      contentPadding: task.type == 'lesson'
-                          ? const EdgeInsets.fromLTRB(16, 4, 12, 0)
-                          : const EdgeInsets.fromLTRB(16, 0, 12, 0),
-                      title: Text(task.name),
-                      subtitle: (task.comments.isNotEmpty || task.type == 'lesson')
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (task.comments.isNotEmpty)
-                                  Text(
-                                    task.comments,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
-                                    ),
-                                  ),
-                                if (task.type == 'lesson')
-                                  FutureBuilder(
-                                    future: _loadLessonDetails(task.value),
-                                    builder: (context, snapshot) {
-                                      final lesson = _lessonCache[task.value];
-                                      return OutlinedButton.icon(
-                                        onPressed: () => _openLesson(task.value),
-                                        icon: const Icon(Icons.play_lesson, size: 18),
-                                        label: Text(
-                                          lesson?['title'] ?? 'Loading lesson...',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Theme.of(context).colorScheme.primary,
-                                          ),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          minimumSize: const Size(0, 32),
-                                          foregroundColor: Theme.of(context).colorScheme.primary,
-                                          side: BorderSide(
-                                            color: Theme.of(context).colorScheme.primary,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                              ],
-                            )
-                          : null,
-                      trailing: Checkbox(
-                        value: task.completed,
-                        onChanged: (value) => _toggleTask(index, value),
-                      ),
-                      onTap: () => _editTaskComments(index),
-                    ),
-                  ),
+      body: Stack(
+        children: [
+          ReorderableListView.builder(
+            itemCount: _tasks.length,
+            onReorder: (oldIndex, newIndex) async {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              setState(() {
+                final task = _tasks.removeAt(oldIndex);
+                _tasks.insert(newIndex, task);
+              });
+              try {
+                await _goalService.updateTasks(
+                  widget.goal.id,
+                  _tasks.map((task) => task.toMap()).toList(),
                 );
-              },
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error reordering tasks: $e')),
+                );
+                await _refreshGoal(); // Revert to server state on error
+              }
+            },
+            itemBuilder: (context, index) {
+              final task = _tasks[index];
+              return Dismissible(
+                key: ValueKey('dismissible_${index}_${task.name}'),
+                background: Container(
+                  color: Theme.of(context).colorScheme.error,
+                  alignment: Alignment.centerLeft,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Icon(Icons.delete, color: Colors.white),
+                  ),
+                ),
+                secondaryBackground: Container(
+                  color: Theme.of(context).colorScheme.error,
+                  alignment: Alignment.centerRight,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Icon(Icons.delete, color: Colors.white),
+                  ),
+                ),
+                onDismissed: (direction) {
+                  _deleteTask(index);
+                },
+                child: Card(
+                  key: ValueKey('card_${index}_${task.name}'),
+                  elevation: 0,
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[700]!
+                          : Colors.grey[300]!,
+                      width: 1,
+                    ),
+                  ),
+                  child: ListTile(
+                    leading: ReorderableDragStartListener(
+                      index: index,
+                      child: const Icon(Icons.drag_handle),
+                    ),
+                    contentPadding: task.type == 'lesson'
+                        ? const EdgeInsets.fromLTRB(16, 4, 12, 0)
+                        : const EdgeInsets.fromLTRB(16, 0, 12, 0),
+                    title: Text(task.name),
+                    subtitle: (task.comments.isNotEmpty || task.type == 'lesson')
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (task.comments.isNotEmpty)
+                                Text(
+                                  task.comments,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                  ),
+                                ),
+                              if (task.type == 'lesson')
+                                FutureBuilder(
+                                  future: _loadLessonDetails(task.value),
+                                  builder: (context, snapshot) {
+                                    final lesson = _lessonCache[task.value];
+                                    return OutlinedButton.icon(
+                                      onPressed: () => _openLesson(task.value),
+                                      icon: const Icon(Icons.play_lesson, size: 18),
+                                      label: Text(
+                                        lesson?['title'] ?? 'Loading lesson...',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        minimumSize: const Size(0, 32),
+                                        foregroundColor: Theme.of(context).colorScheme.primary,
+                                        side: BorderSide(
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                            ],
+                          )
+                        : null,
+                    trailing: Checkbox(
+                      value: task.completed,
+                      onChanged: (value) => _toggleTask(index, value),
+                    ),
+                    onTap: () => _editTaskComments(index),
+                  ),
+                ),
+              );
+            },
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
             ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addTask,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
@@ -423,53 +436,59 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
+      backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
       title: const Text('Add Task'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              controller: _taskController,
-              decoration: const InputDecoration(
-                labelText: 'Task Name',
-                hintText: 'Enter task name',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a task name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (_lessons.isNotEmpty)
-              DropdownButtonFormField<String>(
-                value: _selectedLessonId,
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _taskController,
                 decoration: const InputDecoration(
-                  labelText: 'Lesson (Optional)',
+                  labelText: 'Task Name',
+                  hintText: 'Enter task name',
                 ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('No lesson'),
-                  ),
-                  ..._lessons.map((lesson) => DropdownMenuItem<String>(
-                        value: lesson['id'],
-                        child: Text(lesson['title']),
-                      )),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedLessonId = value;
-                  });
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter a task name';
+                  }
+                  return null;
                 },
               ),
-          ],
+              const SizedBox(height: 16),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_lessons.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: _selectedLessonId,
+                  dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Lesson (Optional)',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('No lesson'),
+                    ),
+                    ..._lessons.map((lesson) => DropdownMenuItem<String>(
+                          value: lesson['id'],
+                          child: Text(lesson['title']),
+                        )),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedLessonId = value;
+                    });
+                  },
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -515,7 +534,9 @@ class _TaskCommentsDialogState extends State<TaskCommentsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Dialog(
+      backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
       child: Container(
         width: 400,
         padding: const EdgeInsets.all(16),
