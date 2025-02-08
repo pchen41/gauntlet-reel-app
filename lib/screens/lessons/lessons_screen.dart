@@ -5,10 +5,10 @@ import '../../services/lesson_service.dart';
 import 'lesson_detail_screen.dart';
 
 class LessonsScreen extends StatefulWidget {
-  const LessonsScreen({Key? key}) : super(key: key);
+  const LessonsScreen({super.key});
 
   @override
-  _LessonsScreenState createState() => _LessonsScreenState();
+  State<LessonsScreen> createState() => _LessonsScreenState();
 }
 
 class _LessonsScreenState extends State<LessonsScreen> {
@@ -322,7 +322,7 @@ class _LessonsScreenState extends State<LessonsScreen> {
                               ),
                             ),
                           ),
-                          ..._recentLessons.map(_buildLessonCard).toList(),
+                          ..._recentLessons.map(_buildLessonCard),
                           const Padding(
                             padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 4.0),
                             child: Text(
@@ -334,7 +334,7 @@ class _LessonsScreenState extends State<LessonsScreen> {
                             ),
                           ),
                         ],
-                        ..._allLessons.map(_buildLessonCard).toList(),
+                        ..._allLessons.map(_buildLessonCard),
                       ],
                     ),
                   ),

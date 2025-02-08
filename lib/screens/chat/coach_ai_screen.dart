@@ -150,15 +150,24 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                     ),
                     child: IconButton(
                       icon: chatProvider.isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 24,
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Theme.of(context).brightness == Brightness.light
+                                      ? Colors.white
+                                      : Colors.black,
+                                ),
                               ),
                             )
-                          : const Icon(Icons.send),
+                          : Icon(
+                              Icons.send,
+                              color: Theme.of(context).brightness == Brightness.light
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
                       onPressed: chatProvider.isLoading ? null : _sendMessage,
                     ),
                   ),

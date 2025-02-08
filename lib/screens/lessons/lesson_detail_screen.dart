@@ -169,15 +169,17 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
                         ))
                     .toList();
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => VideoFeedScreen(
-                      videos: lessonVideos,
-                      initialIndex: index,
+                if (mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => VideoFeedScreen(
+                        videos: lessonVideos,
+                        initialIndex: index,
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               },
               child: SizedBox(
                 height: 75,

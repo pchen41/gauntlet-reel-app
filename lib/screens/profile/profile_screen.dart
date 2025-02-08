@@ -14,7 +14,7 @@ import '../lessons/lesson_detail_screen.dart';
 import 'package:flutter/services.dart';
 
 class ProfileScreen extends StatefulWidget {
-  ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -110,10 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _handleRefresh() async {
-    await _loadUserContent();
   }
 
   Widget _buildLessonList(List<Map<String, dynamic>> lessons) {
@@ -256,6 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     .indexWhere((v) => v.id == video['id']);
                   
                   if (currentVideoIndex != -1) {
+                    if (!mounted) return;
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -346,15 +343,18 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     );
 
                     if (result != null) {
+                      if (!mounted) return;
                       final file = File(result.files.single.path!);
+                      BuildContext currentContext = context;
                       
                       // Show dialog for video details
                       final details = await showDialog<Map<String, String>>(
-                        context: context,
+                        context: currentContext,
                         builder: (context) => _VideoDetailsDialog(),
                       );
 
-                      if (details != null && mounted) {
+                      if (details != null) {
+                        if (!mounted) return;
                         setState(() {
                           _isUploadingVideo = true;
                         });
@@ -367,17 +367,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             userId: _authService.currentUser!.uid,
                           );
                           
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Video uploaded successfully')),
-                            );
-                          }
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(currentContext).showSnackBar(
+                            const SnackBar(content: Text('Video uploaded successfully')),
+                          );
                         } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error uploading video: $e')),
-                            );
-                          }
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(currentContext).showSnackBar(
+                            SnackBar(content: Text('Error uploading video: $e')),
+                          );
                         } finally {
                           if (mounted) {
                             setState(() {
@@ -405,8 +403,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               IconButton(
                 icon: const Icon(Icons.logout),
                 onPressed: () async {
+                  BuildContext currentContext = context;
                   await _authService.signOut();
-                  Navigator.pushReplacementNamed(context, '/login');
+                  if (!mounted) return;
+                  Navigator.pushReplacementNamed(currentContext, '/login');
                 },
               ),
             ],

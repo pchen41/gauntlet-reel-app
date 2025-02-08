@@ -119,7 +119,7 @@ class VideoService {
           .get();
 
       return querySnapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return VideoModel.fromMap(data, doc.id);
       }).toList();
     } catch (e) {
