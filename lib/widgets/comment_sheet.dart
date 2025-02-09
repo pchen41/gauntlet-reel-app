@@ -75,30 +75,60 @@ class _CommentSheetState extends State<CommentSheet> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 24.0),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _commentController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Add a comment...',
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
+                    onSubmitted: (_) async {
+                      if (_commentController.text.isNotEmpty) {
+                        await _commentService.addComment(
+                          _authService.currentUser!.uid,
+                          widget.videoId,
+                          _commentController.text,
+                        );
+                        _commentController.clear();
+                      }
+                    },
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: () async {
-                    if (_commentController.text.isNotEmpty) {
-                      await _commentService.addComment(
-                        _authService.currentUser!.uid,
-                        widget.videoId,
-                        _commentController.text,
-                      );
-                      _commentController.clear();
-                    }
-                  },
+                const SizedBox(width: 8),
+                Container(
+                  height: 48,
+                  width: 48,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.send,
+                      color: Theme.of(context).brightness == Brightness.light
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                    onPressed: () async {
+                      if (_commentController.text.isNotEmpty) {
+                        await _commentService.addComment(
+                          _authService.currentUser!.uid,
+                          widget.videoId,
+                          _commentController.text,
+                        );
+                        _commentController.clear();
+                      }
+                    },
+                  ),
                 ),
               ],
             ),

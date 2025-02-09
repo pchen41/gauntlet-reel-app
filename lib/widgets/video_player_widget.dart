@@ -289,7 +289,7 @@ class _ActionButton extends StatelessWidget {
             size: 32,
             shadows: const [Shadow(blurRadius: 8, color: Colors.black)],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(

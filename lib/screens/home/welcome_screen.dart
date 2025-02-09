@@ -16,16 +16,16 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  final GoalService _goalService = GoalService();
   final LessonService _lessonService = LessonService();
-  final UserService _userService = UserService();
+  final GoalService _goalService = GoalService();
   bool _isLoading = true;
+  String _userName = '';
+  int _viewedLessons = 0;
   int _completedObjectives = 0;
   int _completedGoals = 0;
-  int _viewedLessons = 0;
-  String _userName = '';
   List<Map<String, dynamic>> _recentLessons = [];
-  List<dynamic> _goals = [];
+  List<Map<String, dynamic>> _goals = [];
+  List<Map<String, dynamic>> _allGoals = [];
 
   @override
   void initState() {
@@ -87,47 +87,51 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _loadUserProgress() async {
-    if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final goals = await _goalService.getGoals();
-        int objectives = 0;
-        int completedGoals = 0;
+      if (user == null) return;
+
+      final name = user.displayName ?? 'Climber';
+      final goals = await _goalService.getGoals();
+      
+      int objectives = 0;
+      int completedGoals = 0;
+
+      // Filter out completed goals and count objectives
+      final activeGoals = goals.where((goal) {
+        final tasks = (goal['tasks'] as List<dynamic>?) ?? [];
+        final isCompleted = tasks.isNotEmpty && tasks.every((task) => task['completed'] == true);
         
-        // Filter out completed goals
-        final activeGoals = goals.where((goal) {
-          final tasks = (goal['tasks'] as List<dynamic>?) ?? [];
-          final isCompleted = tasks.isNotEmpty && tasks.every((task) => task['completed'] == true);
-          
-          // Count objectives and completed goals for the progress message
-          objectives += tasks.where((task) => task['completed'] == true).length;
-          if (isCompleted) completedGoals++;
-          
-          // Only keep incomplete goals
-          return !isCompleted;
-        }).toList();
+        // Count objectives and completed goals for the progress message
+        objectives += tasks.where((task) => task['completed'] == true).length;
+        if (isCompleted) completedGoals++;
+        
+        // Only keep incomplete goals
+        return !isCompleted;
+      }).toList();
 
-        final viewedLessons = await _lessonService.getRecentlyViewedLessons(user.uid);
-        final userData = await _userService.getUser(user.uid);
-        final name = userData?['name'] ?? 'Climber';
+      // Get all user's lessons
+      final viewedLessons = await _lessonService.getRecentlyViewedLessons(user.uid);
 
-        if (!mounted) return;
+      if (mounted) {
         setState(() {
           _completedObjectives = objectives;
           _completedGoals = completedGoals;
           _viewedLessons = viewedLessons.length;
           _userName = name;
           _recentLessons = viewedLessons;
-          _goals = activeGoals.take(2).toList();
+          _goals = activeGoals.take(3).toList();
+          _allGoals = goals; // Store all goals, including completed ones
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      debugPrint('Error loading user progress: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -241,67 +245,71 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           width: 1,
         ),
       ),
-      child: ListTile(
-        contentPadding: EdgeInsets.fromLTRB(16, completedTasks > 0 ? 4 : 0, 16, completedTasks > 0 ? 8 : 4),
-        title: Text(
-          goal.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16.0,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              '$completedTasks of $totalTasks tasks completed',
-              style: TextStyle(
-                fontSize: 13.0,
-                color: allTasksCompleted
-                    ? Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF81C784) // Lighter green for dark mode
-                        : const Color(0xFF2E7D32) // Darker green for light mode
-                    : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
-              ),
+      child: InkWell(
+        onTap: () => _navigateToGoal(goalMap['id']),
+        child: ListTile(
+          contentPadding: EdgeInsets.fromLTRB(16, completedTasks > 0 ? 4 : 0, 16, completedTasks > 0 ? 8 : 4),
+          title: Text(
+            goal.name,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16.0,
             ),
-            if (completedTasks > 0) ...[
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
               const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.grey[200],
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    allTasksCompleted
-                        ? Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF81C784) // Lighter green for dark mode
-                            : const Color(0xFF2E7D32) // Darker green for light mode
-                        : Theme.of(context).colorScheme.primary,
-                  ),
-                  minHeight: 4,
+              Text(
+                '$completedTasks of $totalTasks tasks completed',
+                style: TextStyle(
+                  fontSize: 13.0,
+                  color: allTasksCompleted
+                      ? Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF81C784) // Lighter green for dark mode
+                          : const Color(0xFF2E7D32) // Darker green for light mode
+                      : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
                 ),
               ),
-              const SizedBox(height: 1.5), // Added additional padding after progress bar
+              if (completedTasks > 0) ...[
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey[800]
+                        : Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      allTasksCompleted
+                          ? Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF81C784) // Lighter green for dark mode
+                              : const Color(0xFF2E7D32) // Darker green for light mode
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                    minHeight: 4,
+                  ),
+                ),
+                const SizedBox(height: 1.5), // Added additional padding after progress bar
+              ],
             ],
-          ],
+          ),
         ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => GoalDetailScreen(
-                goal: goal,
-                onTasksModified: _loadUserProgress,
-              ),
-            ),
-          );
-        },
+      ),
+    );
+  }
+
+  Future<void> _navigateToGoal(String goalId) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GoalDetailScreen(
+          goalId: goalId,
+          onTasksModified: _loadUserProgress,
+        ),
       ),
     );
   }
@@ -314,7 +322,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const CoachAIScreen(),
+              builder: (context) => CoachAIScreen(
+                existingGoals: _allGoals,
+                onGoalsModified: _loadUserProgress,
+              ),
             ),
           );
         },
@@ -323,12 +334,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 0),
+              child: Row(
                 children: [
                   const Icon(
                     Icons.sports_gymnastics,
@@ -344,48 +354,48 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                 ],
               ),
-              if (_isLoading)
-                Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView(
-                    children: [
-                      const SizedBox(height: 24),
-                      RichText(
-                        text: TextSpan(
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Theme.of(context).colorScheme.onBackground,
-                          ),
-                          children: _buildProgressSpans(context),
-                        ),
-                      ),
-                      if (_recentLessons.isNotEmpty) ...[
-                        const SizedBox(height: 32),
-                        Text(
-                          'Recent Lessons',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        ...(_recentLessons.take(2).map(_buildLessonCard).toList()),
-                      ],
-                      if (_goals.isNotEmpty) ...[
-                        const SizedBox(height: 32),
-                        Text(
-                          'Top Goals',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        ...(_goals.take(2).map((g) => _buildGoalCard(g)).toList()),
-                      ],
-                    ],
-                  ),
+            ),
+            if (_isLoading)
+              Expanded(
+                child: Center(
+                  child: CircularProgressIndicator(),
                 ),
-            ],
-          ),
+              )
+            else
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 80.0), // Added bottom padding for FAB
+                  children: [
+                    RichText(
+                      text: TextSpan(
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onBackground,
+                        ),
+                        children: _buildProgressSpans(context),
+                      ),
+                    ),
+                    if (_recentLessons.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      Text(
+                        'Recent Lessons',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      ...(_recentLessons.take(3).map(_buildLessonCard).toList()),
+                    ],
+                    if (_goals.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      Text(
+                        'Top Goals',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      ...(_goals.take(3).map((g) => _buildGoalCard(g)).toList()),
+                    ],
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

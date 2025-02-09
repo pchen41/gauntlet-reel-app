@@ -274,14 +274,41 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
         return `{"title": "${data.title}", "description": "${data.description}", "id": "${doc.id}"}`;
       }).join('\n');
 
+      // Fetch user's goals from Firebase
+      const goalsSnapshot = await admin.firestore().collection('goals')
+        .where('uid', '==', userId)
+        .select('name', 'tasks')
+        .get();
+
+      const formattedGoals = goalsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const formattedTasks = (data.tasks || []).map((task: any) => {
+          return `{"name": "${task.name}", "completed": ${task.completed}, "comments": "${task.comments || ''}", "type": "${task.type}", "value": "${task.value}"}`;
+        }).join(',\n          ');
+        return `{
+          "id": "${doc.id}",
+          "name": "${data.name}",
+          "tasks": [
+          ${formattedTasks}
+          ]
+        }`;
+      }).join('\n');
+
     // genkit doesn't support tool calling with output schema, so I have to manually include the schema :()
     const system = `
       You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
       You are chatting to a climber that is using an app called "ClimbCoach".
       This app allows the climber improve their climbing skills by setting goals for themselves and watching lessons.
+      Each lesson contains a series of videos that correspond to the lesson topic.
+      Each goal consists of a list of tasks that need to be completed to accomplish the goal.
+      If the task is of type "text", then the value is just the description of the task.
+      If the task is of type "lesson", then the value is just the lesson ID.
 
       Here are the lessons (in JSON format):
       ${formattedLessons}
+
+      Here are the user's current goals (in JSON format):
+      ${formattedGoals}
 
       When asked, provide specific, actionable advice that is encouraging but realistic.
       Keep your response concise. Try to stay under 3 sentences.
@@ -289,7 +316,7 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
       The climber's userId is ${userId}
 
       Output should be in JSON format and conform to the following schema:
-      {"type":"object","properties":{"message":{"type":"string","description":"The response from the coach"},"lessons":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["title","description","id"],"additionalProperties":true},"description":"Any lessons that the coach recommends to the climber. Do not add lessons unless they are mentioned in the message."},"goals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":true},"description":"Any goals that the coach referenced in their message"},"proposedGoals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"The id of the goal if the goal already exists. The proposed goal will overwrite the existing goal. this is used to update existing goals."},"name":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"completed":{"type":"boolean"},"comments":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}},"required":["name","completed","comments","type","value"],"additionalProperties":true}}},"required":["name","tasks"],"additionalProperties":true},"description":"Any goals or goal updates that the coach proposes to the climber."}},"required":["message"],"additionalProperties":true,"$schema":"http://json-schema.org/draft-07/schema#"}
+      {"type":"object","properties":{"message":{"type":"string","description":"The response from the coach"},"lessons":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["title","description","id"],"additionalProperties":true},"description":"Any lessons that the coach recommends to the climber. Do not add lessons unless they are mentioned in the message."},"goals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":true},"description":"Any goals that the coach referenced in their message"},"proposedGoals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"The id of the goal if the goal already exists. The proposed goal will overwrite the existing goal. this is used to update existing goals."},"name":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"completed":{"type":"boolean"},"comments":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}},"required":["name","completed","comments","type","value"],"additionalProperties":true}},"required":["name","tasks"],"additionalProperties":true},"description":"Any goals or goal updates that the coach proposes to the climber."}},"required":["message"],"additionalProperties":true,"$schema":"http://json-schema.org/draft-07/schema#"}
     
       Please always provide something in the "message" field to give the climber additional context.
     `
@@ -307,7 +334,6 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
         system: system,
         prompt: formattedPrompt,
         messages: messages ? messages as any : undefined,
-        tools: [getGoals],
         /*output: {
           format: 'json',
           schema: z.object({

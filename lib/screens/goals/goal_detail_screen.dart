@@ -5,12 +5,12 @@ import '../../services/goal_service.dart';
 import '../lessons/lesson_detail_screen.dart';
 
 class GoalDetailScreen extends StatefulWidget {
-  final Goal goal;
+  final String goalId;
   final VoidCallback? onTasksModified;
 
   const GoalDetailScreen({
     super.key,
-    required this.goal,
+    required this.goalId,
     this.onTasksModified,
   });
 
@@ -23,20 +23,32 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   final Map<String, Map<String, dynamic>> _lessonCache = {};
   bool _isLoading = false;
   List<GoalTask> _tasks = [];
+  Goal? _goal;
 
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    _loadGoal();
+  }
+
+  Future<void> _loadGoal() async {
+    setState(() => _isLoading = true);
+    try {
+      final goalData = await _goalService.getGoal(widget.goalId);
+      _goal = Goal.fromMap(goalData);
+      await _loadTasks();
+    } catch (e) {
+      // Handle error
+      debugPrint('Error loading goal: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _loadTasks() async {
-    final goals = await _goalService.getGoals();
-    final goal = goals.firstWhere((g) => g['id'] == widget.goal.id);
+    if (_goal == null) return;
     setState(() {
-      _tasks = (goal['tasks'] as List<dynamic>?)
-          ?.map((task) => GoalTask.fromMap(Map<String, dynamic>.from(task)))
-          .toList() ?? [];
+      _tasks = _goal!.tasks;
     });
   }
 
@@ -49,7 +61,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     if (task != null) {
       setState(() => _isLoading = true);
       try {
-        await _goalService.addTask(widget.goal.id, task);
+        await _goalService.addTask(widget.goalId, task);
         await _refreshGoal();
         widget.onTasksModified?.call();
       } catch (e) {
@@ -72,7 +84,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       updatedTasks[index] = updatedTasks[index].copyWith(completed: value);
       
       await _goalService.updateTasks(
-        widget.goal.id,
+        widget.goalId,
         updatedTasks.map((task) => task.toMap()).toList(),
       );
       await _refreshGoal();
@@ -93,7 +105,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
 
     try {
       await _goalService.updateTasks(
-        widget.goal.id,
+        widget.goalId,
         _tasks.map((task) => task.toMap()).toList(),
       );
       widget.onTasksModified?.call();
@@ -122,7 +134,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         updatedTasks[index] = updatedTasks[index].copyWith(comments: comments);
         
         await _goalService.updateTasks(
-          widget.goal.id,
+          widget.goalId,
           updatedTasks.map((t) => t.toMap()).toList(),
         );
         await _refreshGoal();
@@ -166,7 +178,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     if (shouldDelete == true) {
       setState(() => _isLoading = true);
       try {
-        await _goalService.deleteGoal(widget.goal.id);
+        await _goalService.deleteGoal(widget.goalId);
+        widget.onTasksModified?.call(); // Call this before popping
         if (!mounted) return;
         Navigator.pop(context); // Return to goals screen
       } catch (e) {
@@ -182,7 +195,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
 
   Future<void> _refreshGoal() async {
     final goals = await _goalService.getGoals();
-    final updatedGoal = goals.firstWhere((g) => g['id'] == widget.goal.id);
+    final updatedGoal = goals.firstWhere((g) => g['id'] == widget.goalId);
     setState(() {
       _tasks = (updatedGoal['tasks'] as List<dynamic>?)
           ?.map((task) => GoalTask.fromMap(Map<String, dynamic>.from(task)))
@@ -220,7 +233,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.goal.name),
+        title: Text(_goal?.name ?? ''),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -243,7 +256,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               });
               try {
                 await _goalService.updateTasks(
-                  widget.goal.id,
+                  widget.goalId,
                   _tasks.map((task) => task.toMap()).toList(),
                 );
                 widget.onTasksModified?.call();

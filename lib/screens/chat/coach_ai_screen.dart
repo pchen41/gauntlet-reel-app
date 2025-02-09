@@ -4,10 +4,18 @@ import 'package:image_picker/image_picker.dart';
 import '../../../providers/chat_provider.dart';
 import '../lessons/lesson_detail_screen.dart';
 import '../../widgets/image_viewer_dialog.dart';
-
+import '../../screens/goals/goal_detail_screen.dart';
+import '../../services/goal_service.dart';
 
 class CoachAIScreen extends StatefulWidget {
-  const CoachAIScreen({super.key});
+  final List<Map<String, dynamic>> existingGoals;
+  final VoidCallback onGoalsModified;
+  
+  const CoachAIScreen({
+    super.key,
+    required this.existingGoals,
+    required this.onGoalsModified,
+  });
 
   @override
   State<CoachAIScreen> createState() => _CoachAIScreenState();
@@ -16,12 +24,18 @@ class CoachAIScreen extends StatefulWidget {
 class _CoachAIScreenState extends State<CoachAIScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final GoalService _goalService = GoalService();
   XFile? _selectedImage;
   bool _isComposing = false;
+  final Map<String, String> _acceptedGoals = {}; // Maps goal name to created Goal ID
 
   @override
   void initState() {
     super.initState();
+    // Initialize accepted goals from existing goals
+    for (final goal in widget.existingGoals) {
+      _acceptedGoals[goal['name']] = goal['id'];
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animate: false);
     });
@@ -228,29 +242,33 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                       if (!message.isUser && 
                           (message.goals != null && message.goals!.isNotEmpty) || 
                           (message.proposedGoals != null && message.proposedGoals!.isNotEmpty)) ...[
-                        const SizedBox(height: 8),
+                        SizedBox(height: (message.lessons != null && message.lessons!.isNotEmpty) ? 2 : 8),
                         Wrap(
-                          spacing: 2,
-                          runSpacing: 0,
+                          spacing: 6,
+                          runSpacing: -8,
                           children: [
                             ...?message.goals?.map((goal) => OutlinedButton.icon(
                               onPressed: () {
-                                // Handle existing goal tap
-                              },
-                              icon: const Icon(Icons.flag, size: 18),
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => GoalDetailScreen(goalId: goal.id),
+                                  ),
+                                );                              },
+                              icon: const Icon(Icons.flag, size: 18, color: Colors.green),
                               label: Text(
                                 goal.name,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Colors.green,
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 8),
                                 minimumSize: const Size(0, 32),
-                                foregroundColor: Theme.of(context).colorScheme.primary,
+                                foregroundColor: Colors.green,
                                 side: BorderSide(
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Colors.green,
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
@@ -259,25 +277,118 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                             )),
                             ...?message.proposedGoals?.map((goal) => OutlinedButton.icon(
                               onPressed: () {
-                                // Handle proposed goal tap
+                                if (_acceptedGoals.containsKey(goal.name)) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => GoalDetailScreen(
+                                        goalId: _acceptedGoals[goal.name]!,
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                showDialog(
+                                  context: context,
+                                  builder: (BuildContext context) {
+                                    return AlertDialog(
+                                      backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                          ? const Color(0xFF2C2C2C)
+                                          : null,
+                                      title: Text('Proposed Goal'),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Goal: ${goal.name}'),
+                                          if (goal.tasks.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 8.0),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text('Tasks:'),
+                                                  ...goal.tasks.map((task) => Padding(
+                                                    padding: const EdgeInsets.only(left: 16.0, top: 4.0),
+                                                    child: Text('• ${task.name}'),
+                                                  )),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () async {
+                                            try {
+                                              final goalId = await _goalService.addGoalFromProposal(goal);
+                                              setState(() {
+                                                _acceptedGoals[goal.name] = goalId;
+                                              });
+                                              if (!mounted) return;
+                                              Navigator.pop(context);
+                                              widget.onGoalsModified(); // Refresh welcome screen
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Goal created successfully!'),
+                                                  backgroundColor: Colors.green,
+                                                ),
+                                              );
+                                            } catch (e) {
+                                              if (!mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Error creating goal: $e'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: Colors.green,
+                                          ),
+                                          child: const Text('Accept Goal'),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
                               },
-                              icon: const Icon(Icons.add_task, size: 18),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: const Size(0, 32),
+                                foregroundColor: _acceptedGoals.containsKey(goal.name) 
+                                    ? Colors.green 
+                                    : Colors.orange,
+                                side: BorderSide(
+                                  color: _acceptedGoals.containsKey(goal.name) 
+                                      ? Colors.green 
+                                      : Colors.orange,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              icon: Icon(
+                                _acceptedGoals.containsKey(goal.name) 
+                                    ? Icons.check_circle 
+                                    : Icons.add_task,
+                                size: 18,
+                                color: _acceptedGoals.containsKey(goal.name) 
+                                    ? Colors.green 
+                                    : Colors.orange,
+                              ),
                               label: Text(
                                 goal.name,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                minimumSize: const Size(0, 32),
-                                foregroundColor: Theme.of(context).colorScheme.primary,
-                                side: BorderSide(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: _acceptedGoals.containsKey(goal.name) 
+                                      ? Colors.green 
+                                      : Colors.orange,
                                 ),
                               ),
                             )),
@@ -310,6 +421,46 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Coach AI Chat'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'clear_chat') {
+                try {
+                  final chatProvider = context.read<ChatProvider>();
+                  await chatProvider.clearChat();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Chat history cleared'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error clearing chat: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'clear_chat',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Consumer<ChatProvider>(
         builder: (context, chatProvider, child) {

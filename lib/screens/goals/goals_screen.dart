@@ -167,7 +167,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => GoalDetailScreen(goal: goal),
+                    builder: (context) => GoalDetailScreen(goalId: goal.id),
                   ),
                 );
                 _loadGoals(); // Refresh goals after returning from detail screen

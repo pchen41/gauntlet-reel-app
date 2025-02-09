@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:path/path.dart' as path;
 
 class Lesson {
@@ -41,6 +42,14 @@ class Goal {
       name: json['name']?.toString() ?? '',
     );
   }
+
+  // Convert to GoalModel type
+  Goal toGoalModel() {
+    return Goal(
+      id: id,
+      name: name,
+    );
+  }
 }
 
 class Task {
@@ -70,12 +79,10 @@ class Task {
 }
 
 class ProposedGoal {
-  final String? id;
   final String name;
   final List<Task> tasks;
 
   ProposedGoal({
-    this.id,
     required this.name,
     required this.tasks,
   });
@@ -83,7 +90,6 @@ class ProposedGoal {
   factory ProposedGoal.fromJson(Map<Object?, Object?> json) {
     final tasksList = json['tasks'];
     return ProposedGoal(
-      id: json['id']?.toString(),
       name: json['name']?.toString() ?? '',
       tasks: (tasksList is List)
           ? tasksList
@@ -230,6 +236,44 @@ class ChatProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> clearChat() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Reference to the main document and its messages subcollection
+      final mainDocRef = FirebaseFirestore.instance
+          .collection('genkit_chats')
+          .doc(user.uid);
+          
+      final messagesCollectionRef = mainDocRef.collection('messages');
+      
+      // Get all documents in the messages subcollection
+      final messagesSnapshot = await messagesCollectionRef.get();
+      
+      // Delete all documents in the messages subcollection
+      final batch = FirebaseFirestore.instance.batch();
+      for (var doc in messagesSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      // Clear local messages except the initial greeting
+      _messages.clear();
+      _messages.add(Message(
+        text: "Hello! I'm your ClimbCoach AI assistant. How can I help you today?",
+        isUser: false,
+        timestamp: DateTime.now(),
+      ));
+      
+      notifyListeners();
+    } catch (e) {
+      rethrow;
     }
   }
 }
