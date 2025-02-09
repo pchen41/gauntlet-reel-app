@@ -59,7 +59,7 @@ class _CommentSheetState extends State<CommentSheet> {
                       builder: (context, userSnapshot) {
                         if (!userSnapshot.hasData) {
                           return const ListTile(
-                            title: Text('Loading...'),
+                            title: Text(''),
                           );
                         }
                         final userName = userSnapshot.data?['name'] ?? 'Unknown';

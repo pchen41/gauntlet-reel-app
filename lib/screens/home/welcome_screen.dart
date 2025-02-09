@@ -18,6 +18,7 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final LessonService _lessonService = LessonService();
   final GoalService _goalService = GoalService();
+  final UserService _userService = UserService();
   bool _isLoading = true;
   String _userName = '';
   int _viewedLessons = 0;
@@ -93,7 +94,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final name = user.displayName ?? 'Climber';
+      // Fetch user data from Firestore
+      final userData = await _userService.getUser(user.uid);
+      final name = userData?['name'] ?? 'Climber';
       final goals = await _goalService.getGoals();
       
       int objectives = 0;
