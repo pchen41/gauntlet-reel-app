@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -97,19 +98,19 @@ class Message {
   final String text;
   final bool isUser;
   final DateTime timestamp;
-  final String? imageUrl;
   final List<Lesson>? lessons;
   final List<Goal>? goals;
   final List<ProposedGoal>? proposedGoals;
+  final String? imageUrl;
 
   Message({
     required this.text,
     required this.isUser,
     required this.timestamp,
-    this.imageUrl,
     this.lessons,
     this.goals,
     this.proposedGoals,
+    this.imageUrl,
   });
 }
 
@@ -152,30 +153,45 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> sendMessage(String message, {String? imagePath}) async {
-    if (message.trim().isEmpty && imagePath == null) return;
-
-    String? imageUrl;
-    if (imagePath != null) {
-      imageUrl = await _uploadImage(imagePath);
-    }
-
-    _messages.add(Message(
-      text: message,
-      isUser: true,
-      timestamp: DateTime.now(),
-      imageUrl: imageUrl,
-    ));
-    notifyListeners();
+    if (message.isEmpty && imagePath == null) return;
 
     _isLoading = true;
     notifyListeners();
 
+    String? imageUrl;
+    
     try {
       final functions = FirebaseFunctions.instance;
-      final callable = functions.httpsCallable('coachAiGenkitStructured');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      if (imagePath != null) {
+        imageUrl = await _uploadImage(imagePath);
+        if (imageUrl == null) {
+          throw Exception('Failed to upload image');
+        }
+      }
+
+      _messages.add(Message(
+        text: message,
+        isUser: true,
+        timestamp: DateTime.now(),
+        imageUrl: imageUrl,
+      ));
+
       
-      final result = await callable.call({
+      if (imagePath != null) {
+        // set message to include base64 image
+        final bytes = await File(imagePath).readAsBytes();
+        final base64Image = base64Encode(bytes);
+        message = 'This is a base64 image:\n$base64Image\n\n$message';
+      }
+
+      final result = await functions.httpsCallable('coachAiGenkitStructured').call({
         'message': message,
+        'uid': user.uid,
         if (imageUrl != null) 'imageUrl': imageUrl,
       });
 
@@ -183,12 +199,11 @@ class ChatProvider extends ChangeNotifier {
       final lessonsList = data['lessons'];
       final goalsList = data['goals'];
       final proposedGoalsList = data['proposedGoals'];
-
+      
       _messages.add(Message(
         text: data['response']?.toString() ?? 'No response received',
         isUser: false,
         timestamp: DateTime.now(),
-        imageUrl: data['imageUrl']?.toString(),
         lessons: (lessonsList is List)
             ? lessonsList
                 .map((lesson) => Lesson.fromJson(lesson as Map<Object?, Object?>))

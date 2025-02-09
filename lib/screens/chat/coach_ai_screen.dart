@@ -121,34 +121,49 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (message.imageUrl != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              message.imageUrl!,
-                              fit: BoxFit.cover,
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return Center(
+                      if (message.imageUrl != null) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            message.imageUrl!,
+                            fit: BoxFit.cover,
+                            width: 300,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return SizedBox(
+                                width: 200,
+                                height: 150,
+                                child: Center(
                                   child: CircularProgressIndicator(
                                     value: loadingProgress.expectedTotalBytes != null
                                         ? loadingProgress.cumulativeBytesLoaded /
                                             loadingProgress.expectedTotalBytes!
                                         : null,
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 200,
+                                height: 150,
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: Icon(Icons.error_outline),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      Text(
-                        message.text,
-                        style: TextStyle(
-                          color: message.isUser ? Colors.white : Colors.black87,
+                        if (message.text.isNotEmpty) const SizedBox(height: 8),
+                      ],
+                      if (message.text.isNotEmpty)
+                        Text(
+                          message.text,
+                          style: TextStyle(
+                            color: message.isUser ? Colors.white : Colors.black87,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
