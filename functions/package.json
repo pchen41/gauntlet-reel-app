@@ -15,15 +15,15 @@
   },
   "main": "lib/index.js",
   "dependencies": {
-    "@genkit-ai/firebase": "^0.9.12",
+    "@genkit-ai/firebase": "^1.0.4",
+    "@genkit-ai/googleai": "^1.0.4",
     "@langchain/community": "^0.3.29",
     "@langchain/core": "^0.3.38",
     "@langchain/langgraph": "^0.2.45",
     "@langchain/openai": "^0.4.2",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.0.1",
-    "genkit": "^0.9.12",
-    "genkitx-openai": "^0.13.0",
+    "genkit": "^1.0.4",
     "langchain": "^0.3.15"
   },
   "devDependencies": {
@@ -33,6 +33,7 @@
     "eslint-config-google": "^0.14.0",
     "eslint-plugin-import": "^2.25.4",
     "firebase-functions-test": "^3.1.0",
+    "genkit-cli": "^1.0.4",
     "typescript": "^5.7.3"
   },
   "private": true,
