@@ -147,6 +147,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         (context, index) {
           if (index >= lessons.length) return null;
           final lesson = lessons[index];
+          final thumbnailUrl = lesson['thumbnail_url'];
+          final double thumbnailWidth = 78.0;
+
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 14),
             elevation: 0,
@@ -155,31 +158,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               side: BorderSide(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.grey[700]!
-                    : Colors.grey[300]!,
+                    : Colors.grey[400]!,
                 width: 1,
               ),
             ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16.0),
-              title: Text(
-                lesson['title'] ?? '',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16.0,
-                ),
-              ),
-              subtitle: Text(
-                lesson['description'] ?? '',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+            child: InkWell(
               onTap: () async {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => LessonDetailScreen(
-                      lessonId: lesson['id'],
-                    ),
+                    builder: (context) => LessonDetailScreen(lessonId: lesson['id']),
                   ),
                 );
                 // Refresh data when returning from lesson detail
@@ -187,6 +175,68 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   _loadUserContent();
                 }
               },
+              child: SizedBox(
+                height: 75,
+                child: Row(
+                  children: [
+                    if (thumbnailUrl != null)
+                      SizedBox(
+                        width: thumbnailWidth,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                          child: Image.network(
+                            thumbnailUrl,
+                            fit: BoxFit.cover,
+                            height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: Icon(Icons.error_outline),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          thumbnailUrl != null ? 12.0 : 16.0,
+                          10.0,
+                          16.0,
+                          10.0
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              lesson['title'] ?? '',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16.0,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              lesson['description'] ?? '',
+                              style: TextStyle(
+                                color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                fontSize: 14.0,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         },

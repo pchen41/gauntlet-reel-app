@@ -21,7 +21,7 @@ import { genkit, z } from "genkit";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { getFirestore } from "firebase-admin/firestore";
 import { enableFirebaseTelemetry } from "@genkit-ai/firebase";
-import { gemini15Flash, googleAI } from '@genkit-ai/googleai';
+import { gemini20Flash, googleAI } from '@genkit-ai/googleai';
 
 const openAIKey = defineSecret("OPENAI_API_KEY");
 const googleAPIKey = defineSecret("GOOGLE_GENAI_API_KEY");
@@ -39,7 +39,7 @@ const ai = genkit({
   // specify a default model if not provided in generate params:
   model: gpt4oMini,*/
   plugins: [googleAI()],
-  model: gemini15Flash, // set default model
+  model: gemini20Flash, // set default model
 });
 
 const getLessons = ai.defineTool(
@@ -282,8 +282,6 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
 
       Here are the lessons (in JSON format):
       ${formattedLessons}
-
-      Please do not fetch goals unless very relevant to the climber's question.
 
       When asked, provide specific, actionable advice that is encouraging but realistic.
       Keep your response concise. Try to stay under 3 sentences.

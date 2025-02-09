@@ -373,11 +373,6 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                 padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 24.0),
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.image),
-                      onPressed: _pickImage,
-                      tooltip: 'Upload Image',
-                    ),
                     Expanded(
                       child: TextField(
                         controller: _messageController,
@@ -390,6 +385,11 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.add_photo_alternate),
+                            onPressed: _pickImage,
+                            tooltip: 'Upload Image',
                           ),
                         ),
                         onSubmitted: (_) => _sendMessage(),
