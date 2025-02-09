@@ -29,7 +29,8 @@ const googleAPIKey = defineSecret("GOOGLE_GENAI_API_KEY");
 const app = admin.initializeApp();
 enableFirebaseTelemetry(
   {
-    metricExportIntervalMillis: 20000
+    metricExportIntervalMillis: 20000,
+    metricExportTimeoutMillis: 20000
   }
 );
 const db = getFirestore(app);
@@ -263,12 +264,26 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
         return 0;
       });
 
+      // Fetch lessons from Firebase
+      const lessonsSnapshot = await admin.firestore().collection('lessons')
+        .select('title', 'description')
+        .get();
+      
+      const formattedLessons = lessonsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return `{"title": "${data.title}", "description": "${data.description}", "id": "${doc.id}"}`;
+      }).join('\n');
+
     // genkit doesn't support tool calling with output schema, so I have to manually include the schema :()
     const system = `
       You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
       You are chatting to a climber that is using an app called "ClimbCoach".
       This app allows the climber improve their climbing skills by setting goals for themselves and watching lessons.
-      Please do not fetch lessons or goals unless very relevant to the climber's question.
+
+      Here are the lessons (in JSON format):
+      ${formattedLessons}
+
+      Please do not fetch goals unless very relevant to the climber's question.
 
       When asked, provide specific, actionable advice that is encouraging but realistic.
       Keep your response concise. Try to stay under 3 sentences.
@@ -294,7 +309,7 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
         system: system,
         prompt: formattedPrompt,
         messages: messages ? messages as any : undefined,
-        tools: [getLessons, getGoals],
+        tools: [getGoals],
         /*output: {
           format: 'json',
           schema: z.object({

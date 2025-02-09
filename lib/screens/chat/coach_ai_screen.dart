@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../providers/chat_provider.dart';
 import '../lessons/lesson_detail_screen.dart';
+import '../../widgets/image_viewer_dialog.dart';
+
 
 class CoachAIScreen extends StatefulWidget {
   const CoachAIScreen({super.key});
@@ -14,14 +16,36 @@ class CoachAIScreen extends StatefulWidget {
 class _CoachAIScreenState extends State<CoachAIScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final ImagePicker _picker = ImagePicker();
   XFile? _selectedImage;
+  bool _isComposing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(animate: false);
+    });
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    if (_scrollController.hasClients) {
+      if (animate) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -33,10 +57,12 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     _messageController.clear();
     setState(() {
       _selectedImage = null;
+      _isComposing = false;
     });
 
     try {
       await chatProvider.sendMessage(message, imagePath: imagePath);
+      _scrollToBottom(animate: true);
     } catch (e) {
       if (!mounted) return;
       
@@ -47,22 +73,11 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
         ),
       );
     }
-
-    // Scroll to bottom after sending message
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   Future<void> _pickImage() async {
     try {
-      final XFile? image = await _picker.pickImage(
+      final XFile? image = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         maxWidth: 1920,
         maxHeight: 1080,
@@ -122,37 +137,47 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (message.imageUrl != null) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            message.imageUrl!,
-                            fit: BoxFit.cover,
-                            width: 300,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return SizedBox(
-                                width: 200,
-                                height: 150,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    value: loadingProgress.expectedTotalBytes != null
-                                        ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                        : null,
+                        GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => ImageViewerDialog(
+                                imageUrl: message.imageUrl!,
+                              ),
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              message.imageUrl!,
+                              fit: BoxFit.cover,
+                              width: 300,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return SizedBox(
+                                  width: 300,
+                                  height: 150,
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      value: loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress.cumulativeBytesLoaded /
+                                              loadingProgress.expectedTotalBytes!
+                                          : null,
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 200,
-                                height: 150,
-                                color: Colors.grey[300],
-                                child: const Center(
-                                  child: Icon(Icons.error_outline),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 300,
+                                  height: 150,
+                                  color: Colors.grey[300],
+                                  child: const Center(
+                                    child: Icon(Icons.error_outline),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
                         if (message.text.isNotEmpty) const SizedBox(height: 8),
@@ -164,6 +189,101 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                             color: message.isUser ? Colors.white : Colors.black87,
                           ),
                         ),
+                      if (!message.isUser && message.lessons != null && message.lessons!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: -8,
+                          children: message.lessons!.map((lesson) => OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => LessonDetailScreen(lessonId: lesson.id),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.play_lesson, size: 18),
+                            label: Text(
+                              lesson.title,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: Theme.of(context).colorScheme.primary,
+                              side: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ],
+                      if (!message.isUser && 
+                          (message.goals != null && message.goals!.isNotEmpty) || 
+                          (message.proposedGoals != null && message.proposedGoals!.isNotEmpty)) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 2,
+                          runSpacing: 0,
+                          children: [
+                            ...?message.goals?.map((goal) => OutlinedButton.icon(
+                              onPressed: () {
+                                // Handle existing goal tap
+                              },
+                              icon: const Icon(Icons.flag, size: 18),
+                              label: Text(
+                                goal.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: const Size(0, 32),
+                                foregroundColor: Theme.of(context).colorScheme.primary,
+                                side: BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                            )),
+                            ...?message.proposedGoals?.map((goal) => OutlinedButton.icon(
+                              onPressed: () {
+                                // Handle proposed goal tap
+                              },
+                              icon: const Icon(Icons.add_task, size: 18),
+                              label: Text(
+                                goal.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: const Size(0, 32),
+                                foregroundColor: Theme.of(context).colorScheme.primary,
+                                side: BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                            )),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -180,101 +300,6 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
               ],
             ],
           ),
-          if (!message.isUser && message.lessons != null && message.lessons!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 2,
-              runSpacing: 0,
-              children: message.lessons!.map((lesson) => OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => LessonDetailScreen(lessonId: lesson.id),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.play_lesson, size: 18),
-                label: Text(
-                  lesson.title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 32),
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                  side: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              )).toList(),
-            ),
-          ],
-          if (!message.isUser && 
-              (message.goals != null && message.goals!.isNotEmpty) || 
-              (message.proposedGoals != null && message.proposedGoals!.isNotEmpty)) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 2,
-              runSpacing: 0,
-              children: [
-                ...?message.goals?.map((goal) => OutlinedButton.icon(
-                  onPressed: () {
-                    // Handle existing goal tap
-                  },
-                  icon: const Icon(Icons.flag, size: 18),
-                  label: Text(
-                    goal.name,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 32),
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                )),
-                ...?message.proposedGoals?.map((goal) => OutlinedButton.icon(
-                  onPressed: () {
-                    // Handle proposed goal tap
-                  },
-                  icon: const Icon(Icons.add_task, size: 18),
-                  label: Text(
-                    goal.name,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 32),
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                )),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -287,115 +312,126 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
         title: const Text('Coach AI Chat'),
       ),
       body: Consumer<ChatProvider>(
-        builder: (context, chatProvider, child) => Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                itemCount: chatProvider.messages.length,
-                itemBuilder: (context, index) => 
-                    _buildMessage(chatProvider.messages[index]),
-              ),
-            ),
-            if (_selectedImage != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  border: Border(
-                    top: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
-                      width: 1,
-                    ),
-                  ),
+        builder: (context, chatProvider, child) {
+          if (chatProvider.messages.isEmpty) {
+            return const Center(
+              child: Text('No messages yet'),
+            );
+          }
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom(animate: true);
+          });
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  itemCount: chatProvider.messages.length,
+                  itemBuilder: (context, index) => _buildMessage(chatProvider.messages[index]),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.image, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _selectedImage!.name,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+              ),
+              if (_selectedImage != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceVariant,
+                    border: Border(
+                      top: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                        width: 1,
                       ),
                     ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.image, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _selectedImage!.name,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: _cancelImageSelection,
+                        tooltip: 'Cancel image selection',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 24.0),
+                child: Row(
+                  children: [
                     IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: _cancelImageSelection,
-                      tooltip: 'Cancel image selection',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 32,
+                      icon: const Icon(Icons.image),
+                      onPressed: _pickImage,
+                      tooltip: 'Upload Image',
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        enabled: !chatProvider.isLoading,
+                        decoration: InputDecoration(
+                          hintText: 'Ask Coach AI...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: IconButton(
+                        icon: chatProvider.isLoading
+                            ? SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).brightness == Brightness.light
+                                        ? Colors.white
+                                        : Colors.black,
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                Icons.send,
+                                color: Theme.of(context).brightness == Brightness.light
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                        onPressed: chatProvider.isLoading ? null : _sendMessage,
                       ),
                     ),
                   ],
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 24.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.image),
-                    onPressed: _pickImage,
-                    tooltip: 'Upload Image',
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      enabled: !chatProvider.isLoading,
-                      decoration: InputDecoration(
-                        hintText: 'Ask Coach AI...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: IconButton(
-                      icon: chatProvider.isLoading
-                          ? SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Theme.of(context).brightness == Brightness.light
-                                      ? Colors.white
-                                      : Colors.black,
-                                ),
-                              ),
-                            )
-                          : Icon(
-                              Icons.send,
-                              color: Theme.of(context).brightness == Brightness.light
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                      onPressed: chatProvider.isLoading ? null : _sendMessage,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
