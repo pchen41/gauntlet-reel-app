@@ -16,12 +16,13 @@ import { BufferMemory } from "langchain/memory";
 import { FirestoreChatMessageHistory } from "@langchain/community/stores/message/firestore";
 import { ConversationChain } from "langchain/chains";
 import admin from 'firebase-admin';
-// import { openAI, gpt4oMini } from "genkitx-openai";
+ import { openAI, gpt4oMini } from "genkitx-openai";
 import { genkit, z } from "genkit";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { getFirestore } from "firebase-admin/firestore";
 import { enableFirebaseTelemetry } from "@genkit-ai/firebase";
-import { gemini20Flash, googleAI } from '@genkit-ai/googleai';
+// import { gemini20Flash, googleAI } from '@genkit-ai/googleai';
+import OpenAI from "openai";
 
 const openAIKey = defineSecret("OPENAI_API_KEY");
 const googleAPIKey = defineSecret("GOOGLE_GENAI_API_KEY");
@@ -35,11 +36,11 @@ enableFirebaseTelemetry(
 );
 const db = getFirestore(app);
 const ai = genkit({
-  /*plugins: [openAI({ apiKey: openAIKey.value() })],
+  plugins: [openAI({ apiKey: openAIKey.value() })],
   // specify a default model if not provided in generate params:
-  model: gpt4oMini,*/
-  plugins: [googleAI()],
-  model: gemini20Flash, // set default model
+  model: gpt4oMini,
+  /*plugins: [googleAI()],
+  model: gemini20Flash, // set default model*/
 });
 
 const getLessons = ai.defineTool(
@@ -103,6 +104,25 @@ const getGoals = ai.defineTool(
   }
 )
 
+
+const annotateImage = ai.defineTool(
+  {
+    name: "annotateImage",
+    description: "Annotates an image given a prompt and an image URL",
+    inputSchema: z.object({
+      prompt: z.string().min(1),
+      imageUrl: z.string().min(1),
+    }),
+    outputSchema: z.object({
+      annotatedImageUrl: z.string().min(1),
+    })
+  },
+  async ({ prompt, imageUrl }) => {
+    return {
+      annotatedImageUrl: " ",
+    }
+  }
+)
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -186,6 +206,105 @@ export const coachAIChat = onCall(async (request) => {
   }
 })
 
+export const coachAIChatOpenAI = onCall(async (request) => {
+  if (!request.auth) {
+    throw new Error("Unauthorized - User must be authenticated");
+  }
+
+  const message = request.data.message;
+  if (!message) {
+    throw new Error("Message is required in request data");
+  }
+
+  const imageUrl = request.data.image;
+
+  const userId = request.auth.uid;
+  const openai = new OpenAI({
+    apiKey: openAIKey.value(),
+  })
+
+  // Fetch both lessons and goals concurrently
+  const [lessonsSnapshot, goalsSnapshot] = await Promise.all([
+    admin.firestore().collection('lessons')
+      .select('title', 'description')
+      .get(),
+    admin.firestore().collection('goals')
+      .where('uid', '==', userId)
+      .select('name', 'tasks')
+      .get()
+  ]);
+
+  const formattedLessons = lessonsSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return `{"title": "${data.title}", "description": "${data.description}", "id": "${doc.id}"}`;
+  }).join('\n');
+
+  const formattedGoals = goalsSnapshot.docs.map(doc => {
+    const data = doc.data();
+    const formattedTasks = (data.tasks || []).map((task: any) => {
+      return `{"name": "${task.name}", "completed": ${task.completed}, "comments": "${task.comments || ''}", "type": "${task.type}", "value": "${task.value}"}`;
+    }).join(',\n          ');
+    return `{
+      "id": "${doc.id}",
+      "name": "${data.name}",
+      "tasks": [
+      ${formattedTasks}
+      ]
+    }`;
+  }).join('\n');
+
+  const system = `
+    You are an expert climbing coach with years of experience in both indoor and outdoor climbing.
+    You are chatting to a climber that is using an app called "ClimbCoach".
+    This app allows the climber improve their climbing skills by setting goals for themselves and watching lessons.
+    Each lesson contains a series of videos that correspond to the lesson topic.
+    Each goal consists of a list of tasks that need to be completed to accomplish the goal.
+    If the task is of type "text", then the value is just the description of the task.
+    If the task is of type "lesson", then the value is just the lesson ID.
+
+    Here are the lessons (in JSON format):
+    ${formattedLessons}
+
+    Here are the user's current goals (in JSON format):
+    ${formattedGoals}
+
+    When asked, provide specific, actionable advice that is encouraging but realistic.
+    Keep your response concise. Try to stay under 3 sentences.
+
+    The climber's userId is ${userId}
+
+    Output should be in JSON format and conform to the following schema:
+    {"type":"object","properties":{"message":{"type":"string","description":"The response from the coach"},"lessons":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["title","description","id"],"additionalProperties":true},"description":"Any lessons that the coach recommends to the climber. Do not add lessons unless they are mentioned in the message."},"goals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":true},"description":"Any goals that the coach referenced in their message"},"proposedGoals":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"completed":{"type":"boolean"},"comments":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}},"required":["name","completed","comments","type","value"],"additionalProperties":true}},"required":["name","tasks"],"additionalProperties":true},"description":"Any goals that the coach proposes to the climber."}},"required":["message"],"additionalProperties":true,"$schema":"http://json-schema.org/draft-07/schema#"}
+
+    Please always provide something in the "message" field to give the climber additional context. If there is any question about a picture or image, please refer to the attached image if any.
+  `
+
+  const content: any[] = [
+    {type: "text", text: message},
+  ]
+
+  if (imageUrl) {
+    content.push({type: "image_url", image_url: {url: imageUrl}})
+  }
+
+  const result = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.5,
+    messages: [
+      {
+        role: "developer",
+        content: system
+      },
+      {
+        role: "user",
+        content: content
+      }
+    ],
+  })
+
+  return {response: result.choices[0].message.content}
+})
+
 const coachAIChatGenkitInternal = ai.defineFlow(
   {
     name: "coachAIChatGenkit",
@@ -231,7 +350,7 @@ const coachAIChatGenkitInternal = ai.defineFlow(
 export const coachAiGenkit = onCallGenkit(
   {
     authPolicy: isSignedIn(),
-    secrets: [googleAPIKey],
+    secrets: [googleAPIKey, openAIKey],
   },
   coachAIChatGenkitInternal,
 )
@@ -318,7 +437,7 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
       Output should be in JSON format and conform to the following schema:
       {"type":"object","properties":{"message":{"type":"string","description":"The response from the coach"},"lessons":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["title","description","id"],"additionalProperties":true},"description":"Any lessons that the coach recommends to the climber. Do not add lessons unless they are mentioned in the message."},"goals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":true},"description":"Any goals that the coach referenced in their message"},"proposedGoals":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"completed":{"type":"boolean"},"comments":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}},"required":["name","completed","comments","type","value"],"additionalProperties":true}},"required":["name","tasks"],"additionalProperties":true},"description":"Any goals that the coach proposes to the climber."}},"required":["message"],"additionalProperties":true,"$schema":"http://json-schema.org/draft-07/schema#"}
     
-      Please always provide something in the "message" field to give the climber additional context.
+      Please always provide something in the "message" field to give the climber additional context. If there is any question about a picture or image, please refer to the attached image if any.
     `
 
     const prompt = input.message

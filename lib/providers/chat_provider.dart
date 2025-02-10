@@ -188,17 +188,17 @@ class ChatProvider extends ChangeNotifier {
       ));
 
       
-      if (imagePath != null) {
+      /*if (imagePath != null) {
         // set message to include base64 image
         final bytes = await File(imagePath).readAsBytes();
         final base64Image = base64Encode(bytes);
-        message = 'This is a base64 image:\n$base64Image\n\n$message';
-      }
+        message = 'This is a base64 image:\n"$base64Image"\n\n$message';
+      }*/
 
       final result = await functions.httpsCallable('coachAiGenkitStructured').call({
         'message': message,
         'uid': user.uid,
-        if (imageUrl != null) 'imageUrl': imageUrl,
+        if (imageUrl != null) 'image': imageUrl,
       });
 
       final data = result.data as Map<Object?, Object?>;
