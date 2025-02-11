@@ -104,7 +104,7 @@ const getGoals = ai.defineTool(
   }
 )
 
-
+/*
 const annotateImage = ai.defineTool(
   {
     name: "annotateImage",
@@ -122,7 +122,7 @@ const annotateImage = ai.defineTool(
       annotatedImageUrl: " ",
     }
   }
-)
+)*/
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
