@@ -6,6 +6,7 @@ import '../../services/lesson_service.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../models/video_model.dart';
 import '../video/video_feed_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class LessonDetailScreen extends StatefulWidget {
   final String lessonId;
@@ -190,18 +191,16 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
                         width: thumbnailWidth,
                         child: ClipRRect(
                           borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                          child: Image.network(
-                            thumbnailUrl,
-                            fit: BoxFit.cover,
+                          child: CachedNetworkImage(
                             height: double.infinity,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: const Center(
-                                  child: Icon(Icons.error_outline),
-                                ),
-                              );
-                            },
+                            imageUrl: thumbnailUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey[300],                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.error),
+                            ),
                           ),
                         ),
                       ),

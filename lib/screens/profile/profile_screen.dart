@@ -12,6 +12,7 @@ import '../../providers/theme_provider.dart';
 import '../../services/lesson_service.dart';
 import '../lessons/lesson_detail_screen.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -32,18 +33,29 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   List<Map<String, dynamic>> _bookmarkedLessons = [];
   List<Map<String, dynamic>> _likedVideos = [];
   Map<String, Map<String, dynamic>> _videoLessons = {};  // Map of video ID to lesson data
+  late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _focusNode = FocusNode();
+    _focusNode.addListener(_onFocusChange);
     _initializeData();
   }
 
   @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) {
+      _refreshLikedVideos();
+    }
   }
 
   Future<void> _initializeData() async {
@@ -109,6 +121,37 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       print('Error loading content: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _refreshLikedVideos() async {
+    try {
+      // Get liked videos
+      final likedVideos = await _videoService.getLikedVideos(_authService.currentUser!.uid);
+      
+      // Get all lessons to map videos to lessons
+      final allLessons = await _lessonService.getAllLessons();
+      
+      // Create a map of video IDs to find which lesson each video belongs to
+      Map<String, Map<String, dynamic>> videoLessons = {};
+      
+      // For each lesson, check if it contains any of our liked videos
+      for (var lesson in allLessons) {
+        final List<dynamic> lessonVideos = lesson['videos'] ?? [];
+        for (var video in likedVideos) {
+          if (lessonVideos.contains(video['id'])) {
+            videoLessons[video['id']] = lesson;
+          }
+        }
+      }
+      
+      if (!mounted) return;
+      setState(() {
+        _likedVideos = likedVideos;
+        _videoLessons = videoLessons;
+      });
+    } catch (e) {
+      print('Error refreshing liked videos: $e');
     }
   }
 
@@ -184,18 +227,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         width: thumbnailWidth,
                         child: ClipRRect(
                           borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                          child: Image.network(
-                            thumbnailUrl,
-                            fit: BoxFit.cover,
+                          child: CachedNetworkImage(
                             height: double.infinity,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: const Center(
-                                  child: Icon(Icons.error_outline),
-                                ),
-                              );
-                            },
+                            imageUrl: thumbnailUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey[300],
+                            ),
                           ),
                         ),
                       ),
@@ -340,19 +378,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 Container(
                   color: Colors.grey[300],
                   child: video['thumbnail_url'] != null
-                      ? Image.network(
-                          video['thumbnail_url'],
+                      ? CachedNetworkImage(
+                          imageUrl: video['thumbnail_url'],
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            print('Error loading thumbnail: $error');
-                            return const Center(
-                              child: Icon(
-                                Icons.error_outline,
-                                size: 30,
-                                color: Colors.grey,
-                              ),
-                            );
-                          },
+                          placeholder: (context, url) => Container(
+                            color: Colors.grey[300],
+                          ),                        
                         )
                       : const Center(
                           child: Icon(
@@ -377,191 +408,194 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Stack(
-      children: [
-        Scaffold(
-          appBar: AppBar(
-            title: const Text('Profile'),
-            actions: [
-              if (_user?.email == 'peter.chen@gauntletai.com')
-                IconButton(
-                  icon: const Icon(Icons.upload),
-                  onPressed: () async {
-                    FilePickerResult? result = await FilePicker.platform.pickFiles(
-                      type: FileType.video,
-                      allowMultiple: false,
-                    );
-
-                    if (result != null) {
-                      if (!mounted) return;
-                      final file = File(result.files.single.path!);
-                      BuildContext currentContext = context;
-                      
-                      // Show dialog for video details
-                      final details = await showDialog<Map<String, String>>(
-                        context: currentContext,
-                        builder: (context) => _VideoDetailsDialog(),
+    return Focus(
+      focusNode: _focusNode,
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              title: const Text('Profile'),
+              actions: [
+                if (_user?.email == 'peter.chen@gauntletai.com')
+                  IconButton(
+                    icon: const Icon(Icons.upload),
+                    onPressed: () async {
+                      FilePickerResult? result = await FilePicker.platform.pickFiles(
+                        type: FileType.video,
+                        allowMultiple: false,
                       );
 
-                      if (details != null) {
+                      if (result != null) {
                         if (!mounted) return;
-                        setState(() {
-                          _isUploadingVideo = true;
-                        });
+                        final file = File(result.files.single.path!);
+                        BuildContext currentContext = context;
                         
-                        try {
-                          await _videoService.uploadVideo(
-                            videoFile: file,
-                            title: details['title']!,
-                            description: details['description'] ?? '',
-                            userId: _authService.currentUser!.uid,
-                          );
+                        // Show dialog for video details
+                        final details = await showDialog<Map<String, String>>(
+                          context: currentContext,
+                          builder: (context) => _VideoDetailsDialog(),
+                        );
+
+                        if (details != null) {
+                          if (!mounted) return;
+                          setState(() {
+                            _isUploadingVideo = true;
+                          });
                           
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(currentContext).showSnackBar(
-                            const SnackBar(content: Text('Video uploaded successfully')),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(currentContext).showSnackBar(
-                            SnackBar(content: Text('Error uploading video: $e')),
-                          );
-                        } finally {
-                          if (mounted) {
-                            setState(() {
-                              _isUploadingVideo = false;
-                            });
+                          try {
+                            await _videoService.uploadVideo(
+                              videoFile: file,
+                              title: details['title']!,
+                              description: details['description'] ?? '',
+                              userId: _authService.currentUser!.uid,
+                            );
+                            
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(currentContext).showSnackBar(
+                              const SnackBar(content: Text('Video uploaded successfully')),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(currentContext).showSnackBar(
+                              SnackBar(content: Text('Error uploading video: $e')),
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isUploadingVideo = false;
+                              });
+                            }
                           }
                         }
                       }
-                    }
+                    },
+                  ),
+                IconButton(
+                  icon: Consumer<ThemeProvider>(
+                    builder: (context, themeProvider, child) {
+                      return Icon(
+                        themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                      );
+                    },
+                  ),
+                  onPressed: () {
+                    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+                    themeProvider.toggleTheme();
                   },
                 ),
-              IconButton(
-                icon: Consumer<ThemeProvider>(
-                  builder: (context, themeProvider, child) {
-                    return Icon(
-                      themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                    );
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () async {
+                    BuildContext currentContext = context;
+                    await _authService.signOut();
+                    if (!mounted) return;
+                    Navigator.pushReplacementNamed(currentContext, '/login');
                   },
                 ),
-                onPressed: () {
-                  final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-                  themeProvider.toggleTheme();
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  BuildContext currentContext = context;
-                  await _authService.signOut();
-                  if (!mounted) return;
-                  Navigator.pushReplacementNamed(currentContext, '/login');
-                },
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              // User Info Section
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      _user?.name ?? 'Loading...',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      _user?.email ?? 'Loading...',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: TabBar(
-                  controller: _tabController,
-                  tabs: const [
-                    Tab(text: 'Bookmarked'),
-                    Tab(text: 'Liked'),
-                  ],
-                  dividerColor: Theme.of(context).dividerColor.withOpacity(0.1),
-                ),
-              ),
-              // Scrollable content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.only(top: 2),
-                          sliver: _buildLessonList(_bookmarkedLessons),
+              ],
+            ),
+            body: Column(
+              children: [
+                // User Info Section
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Text(
+                        _user?.name ?? 'Loading...',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                      ],
-                    ),
-                    CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-                          sliver: _buildVideoGrid(_likedVideos),
+                      ),
+                      Text(
+                        _user?.email ?? 'Loading...',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
                         ),
-                        const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(6, 2, 0, 0),
-                            child: Text(
-                              'Long press a thumbnail to view the lesson',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'Bookmarked'),
+                      Tab(text: 'Liked'),
+                    ],
+                    dividerColor: Theme.of(context).dividerColor.withOpacity(0.1),
+                  ),
+                ),
+                // Scrollable content
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.only(top: 2),
+                            sliver: _buildLessonList(_bookmarkedLessons),
+                          ),
+                        ],
+                      ),
+                      CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                            sliver: _buildVideoGrid(_likedVideos),
+                          ),
+                          const SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(6, 2, 0, 0),
+                              child: Text(
+                                'Long press a thumbnail to view the lesson',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isUploadingVideo)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Uploading video...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-        if (_isUploadingVideo)
-          Container(
-            color: Colors.black54,
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Uploading video...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

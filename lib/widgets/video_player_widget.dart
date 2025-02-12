@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import '../models/video_model.dart';
 import '../services/like_service.dart';
 import '../services/auth_service.dart';
@@ -21,7 +21,7 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindingObserver {
-  VideoPlayerController? _controller;
+  CachedVideoPlayerPlusController? _controller;
   final LikeService _likeService = LikeService();
   final AuthService _authService = AuthService();
   bool _isInitialized = false;
@@ -84,8 +84,8 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
     if (_isDisposed) return;
     print('Loading video: ${widget.video.url}');
     
-    _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.video.url),
+    _controller = CachedVideoPlayerPlusController.network(
+      widget.video.url,
       videoPlayerOptions: VideoPlayerOptions(
         allowBackgroundPlayback: false,
       ),
@@ -113,6 +113,14 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
   }
 
   @override
+  void dispose() {
+    _isDisposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (!_isInitialized) {
       return const Center(child: CircularProgressIndicator());
@@ -135,7 +143,7 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
             child: Center(
               child: AspectRatio(
                 aspectRatio: _controller!.value.aspectRatio,
-                child: VideoPlayer(_controller!),
+                child: CachedVideoPlayerPlus(_controller!),
               ),
             ),
           ),
@@ -253,14 +261,6 @@ class VideoPlayerWidgetState extends State<VideoPlayerWidget> with WidgetsBindin
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    _controller?.dispose();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 }
 

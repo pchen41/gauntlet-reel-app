@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../lessons/lesson_detail_screen.dart';
 import '../goals/goal_detail_screen.dart';
 import '../chat/coach_ai_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -172,18 +173,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   width: thumbnailWidth,
                   child: ClipRRect(
                     borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                    child: Image.network(
-                      thumbnailUrl,
-                      fit: BoxFit.cover,
+                    child: CachedNetworkImage(
                       height: double.infinity,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Icon(Icons.error_outline),
-                          ),
-                        );
-                      },
+                      imageUrl: thumbnailUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[300],
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.error),
+                      ),
                     ),
                   ),
                 ),
