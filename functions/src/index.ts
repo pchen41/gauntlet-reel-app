@@ -588,7 +588,7 @@ const summarizeLessonInternal = ai.defineFlow(
       ${JSON.stringify(commentsByVideo, null, 2)}
 
       The user can already the the lesson name and description, video count, and a list of the videos including the video names and descriptions.
-      Please give a summary of the provided data. Try to provide insightful information. Do not include IDs in your response. Keep your answer short and concise.
+      Please give a summary of the provided data. Try to provide insightful information. Do not include IDs (e.g. uids, user ids) in your response. Keep your answer short and concise.
     `
 
     const response = await ai.generate(
