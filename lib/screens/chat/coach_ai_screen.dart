@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import '../../../providers/chat_provider.dart';
 import '../lessons/lesson_detail_screen.dart';
 import '../../widgets/image_viewer_dialog.dart';
-import '../../screens/goals/goal_detail_screen.dart';
+import '../goals/goal_detail_screen.dart';
 import '../../services/goal_service.dart';
 
 class CoachAIScreen extends StatefulWidget {
@@ -26,8 +27,10 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
   final ScrollController _scrollController = ScrollController();
   final GoalService _goalService = GoalService();
   XFile? _selectedImage;
+  XFile? _selectedVideo;
   bool _isComposing = false;
   final Map<String, String> _acceptedGoals = {}; // Maps goal name to created Goal ID
+  final Map<String, CachedVideoPlayerPlusController> _videoControllers = {};
 
   @override
   void initState() {
@@ -45,6 +48,9 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    for (var controller in _videoControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -64,18 +70,20 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
 
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    if (message.isEmpty && _selectedImage == null) return;
+    if (message.isEmpty && _selectedImage == null && _selectedVideo == null) return;
 
     final chatProvider = context.read<ChatProvider>();
     final imagePath = _selectedImage?.path;
+    final videoPath = _selectedVideo?.path;
     _messageController.clear();
     setState(() {
       _selectedImage = null;
+      _selectedVideo = null;
       _isComposing = false;
     });
 
     try {
-      await chatProvider.sendMessage(message, imagePath: imagePath);
+      await chatProvider.sendMessage(message, imagePath: imagePath, videoPath: videoPath);
       _scrollToBottom(animate: true);
     } catch (e) {
       if (!mounted) return;
@@ -101,6 +109,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
       if (image != null) {
         setState(() {
           _selectedImage = image;
+          _selectedVideo = null; // Clear video selection when image is picked
         });
       }
     } catch (e) {
@@ -111,9 +120,31 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     }
   }
 
-  void _cancelImageSelection() {
+  Future<void> _pickVideo() async {
+    try {
+      final XFile? video = await ImagePicker().pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 30), // Limit video duration to 30 seconds
+      );
+
+      if (video != null) {
+        setState(() {
+          _selectedVideo = video;
+          _selectedImage = null; // Clear image selection when video is picked
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting video: $e')),
+      );
+    }
+  }
+
+  void _cancelMediaSelection() {
     setState(() {
       _selectedImage = null;
+      _selectedVideo = null;
     });
   }
 
@@ -193,6 +224,55 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                               },
                             ),
                           ),
+                        ),
+                        if (message.text.isNotEmpty) const SizedBox(height: 8),
+                      ],
+                      if (message.videoUrl != null) ...[
+                        FutureBuilder(
+                          future: _initializeVideoController(message.videoUrl!),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.done) {
+                              final controller = _videoControllers[message.videoUrl!]!;
+                              return GestureDetector(
+                                onTap: () => _showFullScreenVideo(controller),
+                                child: SizedBox(
+                                  height: 200,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        AspectRatio(
+                                          aspectRatio: controller.value.aspectRatio,
+                                          child: CachedVideoPlayerPlus(controller),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black45,
+                                            borderRadius: BorderRadius.circular(24),
+                                          ),
+                                          child: const Icon(
+                                            Icons.play_arrow,
+                                            color: Colors.white,
+                                            size: 32,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return const SizedBox(
+                                width: 300,
+                                height: 200,
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                          },
                         ),
                         if (message.text.isNotEmpty) const SizedBox(height: 8),
                       ],
@@ -416,6 +496,75 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
     );
   }
 
+  Future<void> _initializeVideoController(String videoUrl) async {
+    if (!_videoControllers.containsKey(videoUrl)) {
+      final controller = CachedVideoPlayerPlusController.network(
+        videoUrl,
+        videoPlayerOptions: VideoPlayerOptions(
+          allowBackgroundPlayback: false,
+        ),
+      );
+      await controller.initialize();
+      _videoControllers[videoUrl] = controller;
+    }
+  }
+
+  void _showFullScreenVideo(CachedVideoPlayerPlusController controller) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    if (controller.value.isPlaying) {
+                      controller.pause();
+                    } else {
+                      controller.play();
+                    }
+                  },
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: controller.value.aspectRatio,
+                      child: CachedVideoPlayerPlus(controller),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black54, Colors.transparent],
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -483,7 +632,7 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                   itemBuilder: (context, index) => _buildMessage(chatProvider.messages[index]),
                 ),
               ),
-              if (_selectedImage != null)
+              if (_selectedImage != null || _selectedVideo != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
@@ -497,11 +646,11 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.image, size: 20),
+                      Icon(_selectedImage != null ? Icons.image : Icons.video_library, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _selectedImage!.name,
+                          _selectedImage?.name ?? _selectedVideo?.name ?? '',
                           style: Theme.of(context).textTheme.bodyMedium,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -509,8 +658,8 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
-                        onPressed: _cancelImageSelection,
-                        tooltip: 'Cancel image selection',
+                        onPressed: _cancelMediaSelection,
+                        tooltip: 'Cancel media selection',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
                           minWidth: 32,
@@ -539,8 +688,38 @@ class _CoachAIScreenState extends State<CoachAIScreen> {
                           ),
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.add_photo_alternate),
-                            onPressed: _pickImage,
-                            tooltip: 'Upload Image',
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return SafeArea(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ListTile(
+                                          leading: const Icon(Icons.photo),
+                                          title: const Text('Upload Photo'),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            _pickImage();
+                                          },
+                                        ),
+                                        ListTile(
+                                          leading: const Icon(Icons.videocam),
+                                          title: const Text('Upload Video'),
+                                          subtitle: const Text('Max 8 MB'),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            _pickVideo();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                            tooltip: 'Upload Media',
                           ),
                         ),
                         onSubmitted: (_) => _sendMessage(),

@@ -108,6 +108,7 @@ class Message {
   final List<Goal>? goals;
   final List<ProposedGoal>? proposedGoals;
   final String? imageUrl;
+  final String? videoUrl;
 
   Message({
     required this.text,
@@ -117,6 +118,7 @@ class Message {
     this.goals,
     this.proposedGoals,
     this.imageUrl,
+    this.videoUrl,
   });
 }
 
@@ -158,13 +160,46 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String message, {String? imagePath}) async {
-    if (message.isEmpty && imagePath == null) return;
+  Future<String?> _uploadVideo(String filePath) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final file = File(filePath);
+      final fileSize = await file.length();
+      final maxSize = 8 * 1024 * 1024; // 8MB in bytes
+      
+      if (fileSize > maxSize) {
+        throw Exception('Video file size must be less than 8MB');
+      }
+
+      final fileName = path.basename(filePath);
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('videos')
+          .child(user.uid)
+          .child(fileName);
+
+      final uploadTask = storageRef.putFile(file);
+      final snapshot = await uploadTask;
+      
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error uploading video: $e');
+      return null;
+    }
+  }
+
+  Future<void> sendMessage(String message, {String? imagePath, String? videoPath}) async {
+    if (message.isEmpty && imagePath == null && videoPath == null) return;
 
     _isLoading = true;
     notifyListeners();
 
     String? imageUrl;
+    String? videoUrl;
     
     try {
       final functions = FirebaseFunctions.instance;
@@ -180,25 +215,26 @@ class ChatProvider extends ChangeNotifier {
         }
       }
 
+      if (videoPath != null) {
+        videoUrl = await _uploadVideo(videoPath);
+        if (videoUrl == null) {
+          throw Exception('Failed to upload video');
+        }
+      }
+
       _messages.add(Message(
         text: message,
         isUser: true,
         timestamp: DateTime.now(),
         imageUrl: imageUrl,
+        videoUrl: videoUrl,
       ));
-
-      
-      /*if (imagePath != null) {
-        // set message to include base64 image
-        final bytes = await File(imagePath).readAsBytes();
-        final base64Image = base64Encode(bytes);
-        message = 'This is a base64 image:\n"$base64Image"\n\n$message';
-      }*/
 
       final result = await functions.httpsCallable('coachAiGenkitStructured').call({
         'message': message,
         'uid': user.uid,
         if (imageUrl != null) 'image': imageUrl,
+        if (videoUrl != null) 'image': videoUrl,
       });
 
       final data = result.data as Map<Object?, Object?>;

@@ -367,7 +367,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             else
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 80.0), // Added bottom padding for FAB
+                  padding: const EdgeInsets.fromLTRB(24.0, 4.0, 24.0, 80.0), // Added bottom padding for FAB
                   children: [
                     RichText(
                       text: TextSpan(
