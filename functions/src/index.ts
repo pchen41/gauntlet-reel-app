@@ -16,15 +16,15 @@ import { BufferMemory } from "langchain/memory";
 import { FirestoreChatMessageHistory } from "@langchain/community/stores/message/firestore";
 import { ConversationChain } from "langchain/chains";
 import admin from 'firebase-admin';
- import { openAI, gpt4oMini } from "genkitx-openai";
+//import { openAI, gpt4oMini } from "genkitx-openai";
 import { genkit, z } from "genkit";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { getFirestore } from "firebase-admin/firestore";
 import { enableFirebaseTelemetry } from "@genkit-ai/firebase";
-// import { gemini20Flash, googleAI } from '@genkit-ai/googleai';
+import { gemini20Flash, googleAI } from '@genkit-ai/googleai';
 import OpenAI from "openai";
 
-const openAIKey = defineSecret("OPENAI_API_KEY");
+//const openAIKey = defineSecret("OPENAI_API_KEY");
 const googleAPIKey = defineSecret("GOOGLE_GENAI_API_KEY");
 // Initialize Firebase Admin
 const app = admin.initializeApp();
@@ -36,11 +36,11 @@ enableFirebaseTelemetry(
 );
 const db = getFirestore(app);
 const ai = genkit({
-  plugins: [openAI({ apiKey: openAIKey.value() })],
+  /*plugins: [openAI({ apiKey: openAIKey.value() })],
   // specify a default model if not provided in generate params:
-  model: gpt4oMini,
-  /*plugins: [googleAI()],
-  model: gemini20Flash, // set default model*/
+  model: gpt4oMini,*/
+  plugins: [googleAI()],
+  model: gemini20Flash, // set default model
 });
 
 const getLessons = ai.defineTool(
@@ -173,7 +173,7 @@ export const coachAIChat = onCall(async (request) => {
     const model = new ChatOpenAI({
       modelName: "gpt-4o-mini",
       temperature: 0.1,
-      apiKey: openAIKey.value(),
+      //apiKey: openAIKey.value(),
     });
 
     const prompt = ChatPromptTemplate.fromTemplate(`
@@ -220,7 +220,7 @@ export const coachAIChatOpenAI = onCall(async (request) => {
 
   const userId = request.auth.uid;
   const openai = new OpenAI({
-    apiKey: openAIKey.value(),
+    //apiKey: openAIKey.value(),
   })
 
   // Fetch both lessons and goals concurrently
@@ -350,7 +350,7 @@ const coachAIChatGenkitInternal = ai.defineFlow(
 export const coachAiGenkit = onCallGenkit(
   {
     authPolicy: isSignedIn(),
-    secrets: [googleAPIKey, openAIKey],
+    secrets: [googleAPIKey],
   },
   coachAIChatGenkitInternal,
 )
@@ -361,6 +361,9 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
   },
   async (input: {uid: string, message: string, image?: string}) => {
     const userId = input.uid
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userName = userDoc.exists ? userDoc.data()?.name : '';
 
     // Fetch existing messages
     const existingChatRef = db.collection('genkit_chats').doc(userId);
@@ -433,11 +436,12 @@ const coachAIChatGenkitStructuredInternal = ai.defineFlow(
       Keep your response concise. Try to stay under 3 sentences.
 
       The climber's userId is ${userId}
+      The climber's name is ${userName}
 
       Output should be in JSON format and conform to the following schema:
       {"type":"object","properties":{"message":{"type":"string","description":"The response from the coach"},"lessons":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["title","description","id"],"additionalProperties":true},"description":"Any lessons that the coach recommends to the climber. Do not add lessons unless they are mentioned in the message."},"goals":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":true},"description":"Any goals that the coach referenced in their message"},"proposedGoals":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"completed":{"type":"boolean"},"comments":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}},"required":["name","completed","comments","type","value"],"additionalProperties":true}},"required":["name","tasks"],"additionalProperties":true},"description":"Any goals that the coach proposes to the climber."}},"required":["message"],"additionalProperties":true,"$schema":"http://json-schema.org/draft-07/schema#"}
     
-      Please always provide something in the "message" field to give the climber additional context. If there is any question about a picture or image, please refer to the attached image if any.
+      Please always provide something in the "message" field to give the climber additional context. If there is any question about a picture or image, please refer to the attached image if any. Do not use any ids the message field.
     `
 
     const prompt = input.message
@@ -533,4 +537,74 @@ export const coachAiGenkitStructured = onCallGenkit(
     secrets: [googleAPIKey],
   },
   coachAIChatGenkitStructuredInternal,
+)
+
+const summarizeLessonInternal = ai.defineFlow(
+  {
+    name: "summarizeLesson",
+  },
+  async (input: { lessonId: string }) => {
+    // Fetch the lesson document
+    const lessonDoc = await db.collection('lessons').doc(input.lessonId).get();
+    if (!lessonDoc.exists) {
+      throw new Error('Lesson not found');
+    }
+    const lesson = lessonDoc.data();
+    if (!lesson || !lesson.videos) {
+      throw new Error('Lesson is empty')
+    }
+
+    // Batch get all videos in a single request
+    const videosSnapshot = await db.getAll(
+      ...lesson.videos.map((videoId: string) => db.collection('videos').doc(videoId))
+    );
+    const videos = videosSnapshot.map(doc => doc.data());
+
+    // Get all comments for these videos in a single query
+    const commentsSnapshot = await db.collection('comments')
+      .where('video_id', 'in', lesson.videos)
+      .orderBy('created_at', 'desc')
+      .get();
+
+    // Group comments by video ID
+    const commentsByVideo = lesson.videos.map((videoId: string) => ({
+      videoId,
+      comments: commentsSnapshot.docs
+        .filter((doc: any) => doc.data().video_id === videoId)
+        .map((doc: any) => doc.data())
+    }));
+
+    const prompt = `
+      This is data from a lessons screen for an app called "ClimbCoach" which helps climbers improve their climbing skills.
+
+      Here is a lesson name and description:
+      Title: ${lesson.title}
+      Description: ${lesson.description}
+
+      Here are the videos in the lesson (in JSON format):
+      ${JSON.stringify(videos, null, 2)}
+
+      Here are the comments on the videos (in JSON format):
+      ${JSON.stringify(commentsByVideo, null, 2)}
+
+      The user can already the the lesson name and description, video count, and a list of the videos including the video names and descriptions.
+      Please give a summary of the provided data. Try to provide insightful information. Do not include IDs in your response. Keep your answer short and concise.
+    `
+
+    const response = await ai.generate(
+      {
+        prompt: prompt,
+      }
+    )
+
+    return {response: response.message}
+  }
+)
+
+export const summarizeLesson = onCallGenkit(
+  {
+    authPolicy: isSignedIn(),
+    secrets: [googleAPIKey],
+  },
+  summarizeLessonInternal,
 )

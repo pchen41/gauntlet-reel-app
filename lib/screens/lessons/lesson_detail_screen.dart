@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/lesson_service.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../models/video_model.dart';
@@ -110,6 +111,54 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
           );
         }
       }
+    }
+  }
+
+  Future<void> _showAISummary() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to use this feature')),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final functions = FirebaseFunctions.instance;
+      final result = await functions.httpsCallable('summarizeLesson').call({
+        'lessonId': widget.lessonId,
+      });
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss loading dialog
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI Lesson Summary'),
+          content: SingleChildScrollView(
+            child: Text(result.data['response']['content'][0]['text'] ?? 'No summary available'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting AI summary: $e')),
+      );
     }
   }
 
@@ -343,34 +392,78 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.secondary.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.play_circle_outline,
-                                        size: 18,
-                                        color: Theme.of(context).colorScheme.secondary,
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
                                       ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${(_lessonData!['videos'] as List).length} ${(_lessonData!['videos'] as List).length == 1 ? 'video' : 'videos'}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: Theme.of(context).colorScheme.secondary,
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.play_circle_outline,
+                                            size: 18,
+                                            color: Theme.of(context).colorScheme.secondary,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${(_lessonData!['videos'] as List).length} ${(_lessonData!['videos'] as List).length == 1 ? 'video' : 'videos'}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: Theme.of(context).colorScheme.secondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: _showAISummary,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          borderRadius: BorderRadius.circular(20),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.auto_awesome,
+                                              size: 18,
+                                              color: Theme.of(context).colorScheme.onPrimary,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'AI Summary',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Theme.of(context).colorScheme.onPrimary,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
